@@ -6,6 +6,7 @@ import darknet
 import time
 import cv2
 import numpy as np
+import math
 import darknet
 
 
@@ -32,6 +33,8 @@ def parser():
                         help="path to data file")
     parser.add_argument("--thresh", type=float, default=.25,
                         help="remove detections with lower confidence")
+    parser.add_argument("--slice_width", type=int, default=500, help="slice width")
+    parser.add_argument("--slice_height", type=int, default=500, help="slice height")
     return parser.parse_args()
 
 
@@ -114,6 +117,101 @@ def image_detection(image_path, network, class_names, class_colors, thresh):
     darknet.free_image(darknet_image)
     image = darknet.draw_boxes(detections, image_resized, class_colors)
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), detections
+
+
+# CHANGES BEGIN HERE ------------------------------------------------------
+
+# Slices images to desired size in np.array dim (y, x, 3).
+# This is the format that darknet accepts
+# known problems:
+#   If image size is just over slice width or height,
+#   it cuts off images.
+def sliceImagecv2(sliceHeight, sliceWidth, path):
+    img = cv2.imread(path)
+    shape = img.shape
+    height = shape[0]
+    width = shape[1]
+    cols = int(math.ceil(width / sliceWidth))
+    rows = int(math.ceil(height / sliceHeight))
+    numSlices = cols * rows
+
+    lower = sliceHeight
+    right = sliceWidth
+    upper = 0
+    left = 0
+
+    rowCount = 1
+    totalCount = 1
+    count = 1
+    slices = []
+    for slice in range(numSlices):
+        newSlice = img[upper:lower, left:right]
+        slices.append(newSlice)
+        left += sliceWidth
+        totalCount += 1
+        colCount += 1
+        if colCount > cols:
+            rowCount += 1
+            upper += sliceHeight
+            lower = rowCount * sliceHeight
+            colCount = 1
+            left = 0
+        right = colCount * sliceWidth
+        right = right if right < width else width
+        lower = lower if lower < height else height
+    return slices, cols, rows
+
+
+def image_detection_list(slice_width, slice_height, image_path, network, class_names, class_colors, thresh):
+    # Darknet doesn't accept numpy images.
+    # Create one with image we reuse for each detect
+    width = darknet.network_width(network)
+    height = darknet.network_height(network)
+    darknet_image = darknet.make_image(width, height, 3)
+
+    orig_img = cv2.imread(image_path)
+    orig_img_width, orig_img_height = orig_img.shape
+    orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
+    orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+
+    images, cols, rows = sliceImagecv2(slice_height, slice_width, image_path)
+    bboxes = []
+
+    for i, img in images:
+        print('processing ' + str(i))
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        image_resized = cv2.resize(image_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+        darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
+        detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+        bboxes.append(detections)
+
+    darknet.free_image(darknet_image)
+
+    # CORRECT BOUNDING BOX COORDINATES
+    # can edit once sizes are uniform, or collect array of sizes.
+    col_count = 0
+    total_count = 1
+    row_count = 0
+    for i, img_boxes in enumerate(bboxes):
+        for j, box in enumerate(img_boxes):
+            bbox = box[3]  # detections are a tuple of (label, confidence, bbox)
+            x, y, w, h = bbox
+            x = x + col_count * 1000
+            y = y + row_count * 1000
+            box[3] = (x, y, w, h)
+
+        col_count += 1
+        total_count += 1
+        if col_count > cols:
+            col_count = 0
+            row_count += 0
+
+    flat_detections = [item for sub_list in detections for item in sub_list]
+    image = darknet.draw_boxes(flat_detections, orig_img_resized, class_colors)
+
+    # TODO
+    # BOUNDING BOX COMBINATIONS
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), flat_detections
 
 
 def batch_detection(network, images, class_names, class_colors,
@@ -214,8 +312,8 @@ def main():
         else:
             image_name = input("Enter Image Path: ")
         prev_time = time.time()
-        image, detections = image_detection(
-            image_name, network, class_names, class_colors, args.thresh
+        image, detections = image_detection_list(
+            args.slice_width, args.slice_height, image_name, network, class_names, class_colors, args.thresh
             )
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
