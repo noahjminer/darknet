@@ -288,7 +288,6 @@ def batch_detection_example():
                                            class_colors, batch_size=batch_size)
     for name, image in zip(image_names, images):
         cv2.imwrite(name.replace("data/", ""), image)
-    print(detections)
 
 
 def main():
@@ -318,6 +317,7 @@ def main():
         image, detections = image_detection_list(
             args.slice_width, args.slice_height, image_name, network, class_names, class_colors, args.thresh
             )
+        cv2.imwrite('../results', image)
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         darknet.print_detections(detections, args.ext_output)
