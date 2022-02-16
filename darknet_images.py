@@ -318,8 +318,6 @@ def main():
         image, detections = image_detection_list(
             args.slice_width, args.slice_height, image_name, network, class_names, class_colors, args.thresh
             )
-        print(image)
-        print(cv2.imwrite('../result.jpg', image))
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         darknet.print_detections(detections, args.ext_output)
