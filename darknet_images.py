@@ -7,7 +7,6 @@ import time
 import cv2
 import numpy as np
 import math
-import darknet
 
 
 def parser():
@@ -141,6 +140,7 @@ def sliceImagecv2(sliceHeight, sliceWidth, path):
     left = 0
 
     rowCount = 1
+    colCount = 1
     totalCount = 1
     count = 1
     slices = []
@@ -165,53 +165,56 @@ def sliceImagecv2(sliceHeight, sliceWidth, path):
 def image_detection_list(slice_width, slice_height, image_path, network, class_names, class_colors, thresh):
     # Darknet doesn't accept numpy images.
     # Create one with image we reuse for each detect
-    width = darknet.network_width(network)
-    height = darknet.network_height(network)
+    width = slice_width
+    height = slice_height
     darknet_image = darknet.make_image(width, height, 3)
-
     orig_img = cv2.imread(image_path)
-    orig_img_width, orig_img_height = orig_img.shape
+    shape = orig_img.shape
+    orig_img_width = shape[1]
+    orig_img_height = shape[0]
     orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
 
     images, cols, rows = sliceImagecv2(slice_height, slice_width, image_path)
     bboxes = []
 
-    for i, img in images:
-        print('processing ' + str(i))
+    for i, img in enumerate(images):
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        image_resized = cv2.resize(image_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
-        darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
+        # image_resized = cv2.resize(image_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+        darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
         bboxes.append(detections)
 
     darknet.free_image(darknet_image)
 
     # CORRECT BOUNDING BOX COORDINATES
+    # TODO: BOUNDING BOX COMBINATIONS
     # can edit once sizes are uniform, or collect array of sizes.
     col_count = 0
     total_count = 1
     row_count = 0
     for i, img_boxes in enumerate(bboxes):
         for j, box in enumerate(img_boxes):
-            bbox = box[3]  # detections are a tuple of (label, confidence, bbox)
+            bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
             x, y, w, h = bbox
-            x = x + col_count * 1000
-            y = y + row_count * 1000
-            box[3] = (x, y, w, h)
+            x = x + col_count * slice_width
+            y = y + row_count * slice_height
+            bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
         col_count += 1
         total_count += 1
-        if col_count > cols:
+        if col_count >= cols:
             col_count = 0
-            row_count += 0
+            row_count += 1
 
-    flat_detections = [item for sub_list in detections for item in sub_list]
-    image = darknet.draw_boxes(flat_detections, orig_img_resized, class_colors)
-
-    # TODO
-    # BOUNDING BOX COMBINATIONS
-    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), flat_detections
+    flat_detections = [item for sub_list in bboxes for item in sub_list]
+    final_detections = []
+    for i, item in enumerate(flat_detections):  # removing non person labels for clarity
+      print(item[0])
+      if item[0] != 'person':
+        continue
+      final_detections.append(item)
+    return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
 def batch_detection(network, images, class_names, class_colors,
@@ -315,6 +318,8 @@ def main():
         image, detections = image_detection_list(
             args.slice_width, args.slice_height, image_name, network, class_names, class_colors, args.thresh
             )
+        print(image)
+        print(cv2.imwrite('../result.jpg', image))
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         darknet.print_detections(detections, args.ext_output)
@@ -324,6 +329,7 @@ def main():
             cv2.imshow('Inference', image)
             if cv2.waitKey() & 0xFF == ord('q'):
                 break
+        cv2.wait(0)
         index += 1
 
 
