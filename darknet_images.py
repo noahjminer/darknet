@@ -32,8 +32,6 @@ def parser():
                         help="path to data file")
     parser.add_argument("--thresh", type=float, default=.25,
                         help="remove detections with lower confidence")
-    parser.add_argument("--slice_width", type=int, default=500, help="slice width")
-    parser.add_argument("--slice_height", type=int, default=500, help="slice height")
     return parser.parse_args()
 
 
@@ -125,95 +123,85 @@ def image_detection(image_path, network, class_names, class_colors, thresh):
 # known problems:
 #   If image size is just over slice width or height,
 #   it cuts off images.
-def sliceImagecv2(sliceHeight, sliceWidth, path):
+dimension = [[0,500,0,500],[500,1500,0,1000],[0,4096,0,2786]]
+
+def sliceImagecv2(dimension, path):
     img = cv2.imread(path)
-    shape = img.shape
-    height = shape[0]
-    width = shape[1]
-    cols = int(math.ceil(width / sliceWidth))
-    rows = int(math.ceil(height / sliceHeight))
-    numSlices = cols * rows
+    
 
-    lower = sliceHeight
-    right = sliceWidth
-    upper = 0
-    left = 0
-
-    rowCount = 1
-    colCount = 1
-    totalCount = 1
-    count = 1
     slices = []
-    for slice in range(numSlices):
-        newSlice = img[upper:lower, left:right]
+
+    # need to fix these
+
+    # for slice in range(numSlices):
+    for dim in dimension:
+        
+        # newSlice = img[upper:lower, left:right]
+        newSlice = img[ dim[2]:dim[3] , dim[0]:dim[1]]
         slices.append(newSlice)
-        left += sliceWidth
-        totalCount += 1
-        colCount += 1
-        if colCount > cols:
-            rowCount += 1
-            upper += sliceHeight
-            lower = rowCount * sliceHeight
-            colCount = 1
-            left = 0
-        right = colCount * sliceWidth
-        right = right if right < width else width
-        lower = lower if lower < height else height
-    return slices, cols, rows
+        
+    return slices
 
 
-def image_detection_list(slice_width, slice_height, image_path, network, class_names, class_colors, thresh):
+def image_detection_list(image_path, network, class_names, class_colors, thresh):
     # Darknet doesn't accept numpy images.
     # Create one with image we reuse for each detect
-    width = slice_width
-    height = slice_height
-    darknet_image = darknet.make_image(width, height, 3)
+    
+    #width = slice_width
+    #height = slice_height
+    width = []
+    height = []
+    for dim in dimension:
+        width.append(dim[1]-dim[0])
+        height.append(dim[3]-dim[2])
+
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
     orig_img_width = shape[1]
     orig_img_height = shape[0]
     orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
-    orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+    # orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
 
-    images, cols, rows = sliceImagecv2(slice_height, slice_width, image_path)
+    images= sliceImagecv2(dimension, image_path)
     bboxes = []
 
     for i, img in enumerate(images):
+        darknet_image = darknet.make_image(width[i], height[i], 3)
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # image_resized = cv2.resize(image_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+        
+        # image_resized = cv2.resize(image_rgb, (width[i], height[i]), interpolation=cv2.INTER_LINEAR)
+        
         darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
         bboxes.append(detections)
+        darknet.free_image(darknet_image)
 
-    darknet.free_image(darknet_image)
+    
 
     # CORRECT BOUNDING BOX COORDINATES
     # TODO: BOUNDING BOX COMBINATIONS
     # can edit once sizes are uniform, or collect array of sizes.
-    col_count = 0
-    total_count = 1
-    row_count = 0
+
+    
+
     for i, img_boxes in enumerate(bboxes):
         for j, box in enumerate(img_boxes):
             bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
             x, y, w, h = bbox
-            x = x + col_count * slice_width
-            y = y + row_count * slice_height
+            x = dimension[i][0] + x
+            y = dimension[i][2] + y
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
-
-        col_count += 1
-        total_count += 1
-        if col_count >= cols:
-            col_count = 0
-            row_count += 1
+    
 
     flat_detections = [item for sub_list in bboxes for item in sub_list]
+    
     final_detections = []
     for i, item in enumerate(flat_detections):  # removing non person labels for clarity
       print(item[0])
       if item[0] != 'person':
         continue
       final_detections.append(item)
+    
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
@@ -315,7 +303,7 @@ def main():
             image_name = input("Enter Image Path: ")
         prev_time = time.time()
         image, detections = image_detection_list(
-            args.slice_width, args.slice_height, image_name, network, class_names, class_colors, args.thresh
+            image_name, network, class_names, class_colors, args.thresh
             )
         cv2.imwrite('../results.jpg', image)
         if args.save_labels:
