@@ -197,10 +197,16 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     
     final_detections = []
     for i, item in enumerate(flat_detections):  # removing non person labels for clarity
-      print(item[0])
-      if item[0] != 'person':
-        continue
-      final_detections.append(item)
+        print(item[0])
+        if item[0] != 'person':
+            continue
+        final_detections.append(item)
+    
+    print("-----------------")
+    print(final_detections)
+    print("-----------------")
+
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
     
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
@@ -311,11 +317,11 @@ def main():
         darknet.print_detections(detections, args.ext_output)
         elapsed = time.time() - prev_time
         print(f'Processed in {elapsed} seconds.')
-        if not args.dont_show:
-            cv2.imshow('Inference', image)
-            if cv2.waitKey() & 0xFF == ord('q'):
-                break
-        cv2.wait(0)
+        # if not args.dont_show:
+        #     cv2.imshow('Inference', image)
+        #     if cv2.waitKey() & 0xFF == ord('q'):
+        #         break
+        # cv2.wait(0)
         index += 1
 
 
