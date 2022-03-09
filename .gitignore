@@ -10,7 +10,9 @@
 *.lib
 *.dylib
 *.pyc
+/bin/*
 mnist/
+/.idea/*
 data/
 caffe/
 grasp/

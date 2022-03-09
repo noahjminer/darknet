@@ -278,6 +278,22 @@ def batch_detection_example():
         cv2.imwrite(name.replace("data/", ""), image)
 
 
+# creates depth map from mono depth detection image
+# can add params for min rect size
+# threshold is the max diff between avg depth to guide image combination
+def create_depth_map(threshold, depth_map_path):
+    normalize_const = .002
+    image = cv2.imread(depth_map_path)
+    shape = image.shape
+    width = shape[1]
+    height = shape[0]
+
+    for i in range(0, height):
+        for k in range(0, width):
+            print(image[height][width])
+
+
+
 def main():
     args = parser()
     check_arguments_errors(args)
