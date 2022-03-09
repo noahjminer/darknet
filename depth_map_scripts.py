@@ -5,11 +5,11 @@ import math
 # Finds avg distance of a slice
 # current equation is sum of red and green value / 510, but it isn't working as well as it seems
 # Maybe we can find min and max and normalize?? idk
-def findAvgDistance(image, dim):
+def find_avg_distance(image, dim):
     total = 0
     count = 0
     for i in range(dim[2], dim[3]):
-        for j in ranges(dim[0], dim[1]):
+        for j in range(dim[0], dim[1]):
             dist = (image[i][j][0] + image[i][j][1]) / 510
             total += dist
             count += 1
@@ -36,7 +36,7 @@ def create_depth_map(threshold, image_path, compression_rate):
         col_avg = []
         for y in range(1, 7):
             dim = [(x-1)*slice_dim_x, x*slice_dim_x, (y-1)*slice_dim_y, y*slice_dim_y]
-            avg = findAvgDistance(image, dim)
+            avg = find_avg_distance(image, dim)
             col_avg.append(avg)
         avgs.append(col_avg)
 
