@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 import math
 
+from depth_map_scripts import create_depth_map
+
 
 def parser():
     parser = argparse.ArgumentParser(description="YOLO Object Detection")
@@ -125,19 +127,11 @@ def image_detection(image_path, network, class_names, class_colors, thresh):
 #   it cuts off images.
 dimension = [[0,500,0,500],[500,1500,0,1000],[0,4096,0,2786]]
 
-def sliceImagecv2(dimension, path):
-    img = cv2.imread(path)
-    
 
+def sliceImagecv2(dimension, image):
     slices = []
-
-    # need to fix these
-
-    # for slice in range(numSlices):
     for dim in dimension:
-        
-        # newSlice = img[upper:lower, left:right]
-        newSlice = img[ dim[2]:dim[3] , dim[0]:dim[1]]
+        newSlice = image[dim[2]:dim[3], dim[0]:dim[1]]
         slices.append(newSlice)
         
     return slices
@@ -202,6 +196,58 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
         continue
       final_detections.append(item)
     
+    return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
+
+
+def depth_detection_list(image_path, network, class_names, class_colors, thresh):
+    dims = create_depth_map(20, './saturation_disp_1.jpeg', .5)
+
+    width = []
+    height = []
+    for dim in dims:
+        width.append(dim[1] - dim[0])
+        height.append(dim[3] - dim[2])
+
+    orig_img = cv2.imread(image_path)
+    shape = orig_img.shape
+    images = sliceImagecv2(dims, orig_img)
+    bboxes = []
+    for i, img in enumerate(images):
+        darknet_image = darknet.make_image(width[i], height[i], 3)
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
+        detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+        bboxes.append(detections)
+        darknet.free_image(darknet_image)
+
+    # can edit once sizes are uniform, or collect array of sizes.
+    for i, img_boxes in enumerate(bboxes):
+        for j, box in enumerate(img_boxes):
+            bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
+            x, y, w, h = bbox
+            x = dimension[i][0] + x
+            y = dimension[i][2] + y
+            bboxes[i][j] = (box[0], box[1], (x, y, w, h))
+
+    # do whole image
+    darknet_image = darknet.make_image(shape[1], shape[0])
+    image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
+    detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+    bboxes.append(detections)
+    darknet.free_image(darknet_image)
+
+    flat_detections = [item for sub_list in bboxes for item in sub_list]
+
+    final_detections = []
+    for i, item in enumerate(flat_detections):  # removing non person labels for clarity
+        print(item[0])
+        if item[0] != 'person':
+            continue
+        final_detections.append(item)
+
+    
+
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
