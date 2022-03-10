@@ -1,335 +1,331 @@
-#!/usr/bin/env python3
-
-"""
-Python 3 wrapper for identifying objects in images
-
-Running the script requires opencv-python to be installed (`pip install opencv-python`)
-Directly viewing or returning bounding-boxed images requires scikit-image to be installed (`pip install scikit-image`)
-Use pip3 instead of pip on some systems to be sure to install modules for python3
-"""
-
-from ctypes import *
-import math
-import random
+import argparse
 import os
+import glob
+import random
+import darknet
+import time
+import cv2
 import numpy as np
+import math
 
 
-class BOX(Structure):
-    _fields_ = [("x", c_float),
-                ("y", c_float),
-                ("w", c_float),
-                ("h", c_float)]
+def parser():
+    parser = argparse.ArgumentParser(description="YOLO Object Detection")
+    parser.add_argument("--input", type=str, default="",
+                        help="image source. It can be a single image, a"
+                        "txt with paths to them, or a folder. Image valid"
+                        " formats are jpg, jpeg or png."
+                        "If no input is given, ")
+    parser.add_argument("--batch_size", default=1, type=int,
+                        help="number of images to be processed at the same time")
+    parser.add_argument("--weights", default="yolov4.weights",
+                        help="yolo weights path")
+    parser.add_argument("--dont_show", action='store_true',
+                        help="windown inference display. For headless systems")
+    parser.add_argument("--ext_output", action='store_true',
+                        help="display bbox coordinates of detected objects")
+    parser.add_argument("--save_labels", action='store_true',
+                        help="save detections bbox for each image in yolo format")
+    parser.add_argument("--config_file", default="./cfg/yolov4.cfg",
+                        help="path to config file")
+    parser.add_argument("--data_file", default="./cfg/coco.data",
+                        help="path to data file")
+    parser.add_argument("--thresh", type=float, default=.25,
+                        help="remove detections with lower confidence")
+    return parser.parse_args()
 
 
-class DETECTION(Structure):
-    _fields_ = [("bbox", BOX),
-                ("classes", c_int),
-                ("best_class_idx", c_int),
-                ("prob", POINTER(c_float)),
-                ("mask", POINTER(c_float)),
-                ("objectness", c_float),
-                ("sort_class", c_int),
-                ("uc", POINTER(c_float)),
-                ("points", c_int),
-                ("embeddings", POINTER(c_float)),
-                ("embedding_size", c_int),
-                ("sim", c_float),
-                ("track_id", c_int)]
-
-class DETNUMPAIR(Structure):
-    _fields_ = [("num", c_int),
-                ("dets", POINTER(DETECTION))]
+def check_arguments_errors(args):
+    assert 0 < args.thresh < 1, "Threshold should be a float between zero and one (non-inclusive)"
+    if not os.path.exists(args.config_file):
+        raise(ValueError("Invalid config path {}".format(os.path.abspath(args.config_file))))
+    if not os.path.exists(args.weights):
+        raise(ValueError("Invalid weight path {}".format(os.path.abspath(args.weights))))
+    if not os.path.exists(args.data_file):
+        raise(ValueError("Invalid data file path {}".format(os.path.abspath(args.data_file))))
+    if args.input and not os.path.exists(args.input):
+        raise(ValueError("Invalid image path {}".format(os.path.abspath(args.input))))
 
 
-class IMAGE(Structure):
-    _fields_ = [("w", c_int),
-                ("h", c_int),
-                ("c", c_int),
-                ("data", POINTER(c_float))]
-
-
-class METADATA(Structure):
-    _fields_ = [("classes", c_int),
-                ("names", POINTER(c_char_p))]
-
-
-def network_width(net):
-    return lib.network_width(net)
-
-
-def network_height(net):
-    return lib.network_height(net)
-
-
-def bbox2points(bbox):
+def check_batch_shape(images, batch_size):
     """
-    From bounding box yolo format
-    to corner points cv2 rectangle
+        Image sizes should be the same width and height
+    """
+    shapes = [image.shape for image in images]
+    if len(set(shapes)) > 1:
+        raise ValueError("Images don't have same shape")
+    if len(shapes) > batch_size:
+        raise ValueError("Batch size higher than number of images")
+    return shapes[0]
+
+
+def load_images(images_path):
+    """
+    If image path is given, return it directly
+    For txt file, read it and return each line as image path
+    In other case, it's a folder, return a list with names of each
+    jpg, jpeg and png file
+    """
+    input_path_extension = images_path.split('.')[-1]
+    if input_path_extension in ['jpg', 'jpeg', 'png']:
+        return [images_path]
+    elif input_path_extension == "txt":
+        with open(images_path, "r") as f:
+            return f.read().splitlines()
+    else:
+        return glob.glob(
+            os.path.join(images_path, "*.jpg")) + \
+            glob.glob(os.path.join(images_path, "*.png")) + \
+            glob.glob(os.path.join(images_path, "*.jpeg"))
+
+
+def prepare_batch(images, network, channels=3):
+    width = darknet.network_width(network)
+    height = darknet.network_height(network)
+
+    darknet_images = []
+    for image in images:
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_resized = cv2.resize(image_rgb, (width, height),
+                                   interpolation=cv2.INTER_LINEAR)
+        custom_image = image_resized.transpose(2, 0, 1)
+        darknet_images.append(custom_image)
+
+    batch_array = np.concatenate(darknet_images, axis=0)
+    batch_array = np.ascontiguousarray(batch_array.flat, dtype=np.float32)/255.0
+    darknet_images = batch_array.ctypes.data_as(darknet.POINTER(darknet.c_float))
+    return darknet.IMAGE(width, height, channels, darknet_images)
+
+
+def image_detection(image_path, network, class_names, class_colors, thresh):
+    # Darknet doesn't accept numpy images.
+    # Create one with image we reuse for each detect
+    width = darknet.network_width(network)
+    height = darknet.network_height(network)
+    darknet_image = darknet.make_image(width, height, 3)
+
+    image = cv2.imread(image_path)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_resized = cv2.resize(image_rgb, (width, height),
+                               interpolation=cv2.INTER_LINEAR)
+
+    darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
+    detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+    darknet.free_image(darknet_image)
+    image = darknet.draw_boxes(detections, image_resized, class_colors)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), detections
+
+
+# CHANGES BEGIN HERE ------------------------------------------------------
+
+# Slices images to desired size in np.array dim (y, x, 3).
+# This is the format that darknet accepts
+# known problems:
+#   If image size is just over slice width or height,
+#   it cuts off images.
+dimension = [[0,500,0,500],[500,1500,0,1000],[0,4096,0,2786]]
+
+def sliceImagecv2(dimension, path):
+    img = cv2.imread(path)
+    
+
+    slices = []
+
+    # need to fix these
+
+    # for slice in range(numSlices):
+    for dim in dimension:
+        
+        # newSlice = img[upper:lower, left:right]
+        newSlice = img[ dim[2]:dim[3] , dim[0]:dim[1]]
+        slices.append(newSlice)
+        
+    return slices
+
+
+def image_detection_list(image_path, network, class_names, class_colors, thresh):
+    # Darknet doesn't accept numpy images.
+    # Create one with image we reuse for each detect
+    
+    #width = slice_width
+    #height = slice_height
+    width = []
+    height = []
+    for dim in dimension:
+        width.append(dim[1]-dim[0])
+        height.append(dim[3]-dim[2])
+
+    orig_img = cv2.imread(image_path)
+    shape = orig_img.shape
+    orig_img_width = shape[1]
+    orig_img_height = shape[0]
+    orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
+    # orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+
+    images= sliceImagecv2(dimension, image_path)
+    bboxes = []
+
+    for i, img in enumerate(images):
+        darknet_image = darknet.make_image(width[i], height[i], 3)
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # image_resized = cv2.resize(image_rgb, (width[i], height[i]), interpolation=cv2.INTER_LINEAR)
+        
+        darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
+        detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+        bboxes.append(detections)
+        darknet.free_image(darknet_image)
+
+    
+
+    # CORRECT BOUNDING BOX COORDINATES
+    # TODO: BOUNDING BOX COMBINATIONS
+    # can edit once sizes are uniform, or collect array of sizes.
+
+    
+
+    for i, img_boxes in enumerate(bboxes):
+        for j, box in enumerate(img_boxes):
+            bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
+            x, y, w, h = bbox
+            x = dimension[i][0] + x
+            y = dimension[i][2] + y
+            bboxes[i][j] = (box[0], box[1], (x, y, w, h))
+    
+
+    flat_detections = [item for sub_list in bboxes for item in sub_list]
+    
+    final_detections = []
+    for i, item in enumerate(flat_detections):  # removing non person labels for clarity
+        # print(item[0])
+        if item[0] != 'person':
+            continue
+        final_detections.append(item)
+    
+    # print("-----------------")
+    # print(final_detections)
+    # print("-----------------")
+
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
+    
+    return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
+
+
+def batch_detection(network, images, class_names, class_colors,
+                    thresh=0.25, hier_thresh=.5, nms=.45, batch_size=4):
+    image_height, image_width, _ = check_batch_shape(images, batch_size)
+    darknet_images = prepare_batch(images, network)
+    batch_detections = darknet.network_predict_batch(network, darknet_images, batch_size, image_width,
+                                                     image_height, thresh, hier_thresh, None, 0, 0)
+    batch_predictions = []
+    for idx in range(batch_size):
+        num = batch_detections[idx].num
+        detections = batch_detections[idx].dets
+        if nms:
+            darknet.do_nms_obj(detections, num, len(class_names), nms)
+        predictions = darknet.remove_negatives(detections, class_names, num)
+        images[idx] = darknet.draw_boxes(predictions, images[idx], class_colors)
+        batch_predictions.append(predictions)
+    darknet.free_batch_detections(batch_detections, batch_size)
+    return images, batch_predictions
+
+
+def image_classification(image, network, class_names):
+    width = darknet.network_width(network)
+    height = darknet.network_height(network)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_resized = cv2.resize(image_rgb, (width, height),
+                                interpolation=cv2.INTER_LINEAR)
+    darknet_image = darknet.make_image(width, height, 3)
+    darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
+    detections = darknet.predict_image(network, darknet_image)
+    predictions = [(name, detections[idx]) for idx, name in enumerate(class_names)]
+    darknet.free_image(darknet_image)
+    return sorted(predictions, key=lambda x: -x[1])
+
+
+def convert2relative(image, bbox):
+    """
+    YOLO format use relative coordinates for annotation
     """
     x, y, w, h = bbox
-    xmin = int(round(x - (w / 2)))
-    xmax = int(round(x + (w / 2)))
-    ymin = int(round(y - (h / 2)))
-    ymax = int(round(y + (h / 2)))
-    return xmin, ymin, xmax, ymax
+    height, width, _ = image.shape
+    return x/width, y/height, w/width, h/height
 
 
-def class_colors(names):
+def save_annotations(name, image, detections, class_names):
     """
-    Create a dict with one random BGR color for each
-    class name
+    Files saved with image_name.txt and relative coordinates
     """
-    return {name: (
-        random.randint(0, 255),
-        random.randint(0, 255),
-        random.randint(0, 255)) for name in names}
+    file_name = os.path.splitext(name)[0] + ".txt"
+    with open(file_name, "w") as f:
+        for label, confidence, bbox in detections:
+            x, y, w, h = convert2relative(image, bbox)
+            label = class_names.index(label)
+            f.write("{} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(label, x, y, w, h, float(confidence)))
 
 
-def load_network(config_file, data_file, weights, batch_size=1):
-    """
-    load model description and weights from config files
-    args:
-        config_file (str): path to .cfg model file
-        data_file (str): path to .data model file
-        weights (str): path to weights
-    returns:
-        network: trained model
-        class_names
-        class_colors
-    """
-    network = load_net_custom(
-        config_file.encode("ascii"),
-        weights.encode("ascii"), 0, batch_size)
-    metadata = load_meta(data_file.encode("ascii"))
-    class_names = [metadata.names[i].decode("ascii") for i in range(metadata.classes)]
-    colors = class_colors(class_names)
-    return network, class_names, colors
+def batch_detection_example():
+    args = parser()
+    check_arguments_errors(args)
+    batch_size = 3
+    random.seed(3)  # deterministic bbox colors
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=batch_size
+    )
+    image_names = ['data/horses.jpg', 'data/horses.jpg', 'data/eagle.jpg']
+    images = [cv2.imread(image) for image in image_names]
+    images, detections,  = batch_detection(network, images, class_names,
+                                           class_colors, batch_size=batch_size)
+    for name, image in zip(image_names, images):
+        cv2.imwrite(name.replace("data/", ""), image)
 
 
-def print_detections(detections, coordinates=False):
-    print("\nObjects:")
-    for label, confidence, bbox in detections:
-        x, y, w, h = bbox
-        if coordinates:
-            print("{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})".format(label, confidence, x, y, w, h))
+def main():
+    args = parser()
+    check_arguments_errors(args)
+
+    random.seed(3)  # deterministic bbox colors
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=args.batch_size
+    )
+
+    images = load_images(args.input)
+
+    index = 0
+    while True:
+        # loop asking for new image paths if no list is given
+        if args.input:
+            if index >= len(images):
+                break
+            image_name = images[index]
         else:
-            print("{}: {}%".format(label, confidence))
+            image_name = input("Enter Image Path: ")
+        prev_time = time.time()
+        image, detections = image_detection_list(
+            image_name, network, class_names, class_colors, args.thresh
+            )
+        cv2.imwrite('../results.jpg', image)
+        if args.save_labels:
+            save_annotations(image_name, image, detections, class_names)
+        # darknet.print_detections(detections, args.ext_output)
+        elapsed = time.time() - prev_time
+        print(f'Processed in {elapsed} seconds.')
+        # if not args.dont_show:
+        #     cv2.imshow('Inference', image)
+        #     if cv2.waitKey() & 0xFF == ord('q'):
+        #         break
+        # cv2.wait(0)
+        index += 1
 
 
-def draw_boxes(detections, image, colors):
-    import cv2
-    for label, confidence, bbox in detections:
-        left, top, right, bottom = bbox2points(bbox)
-        cv2.rectangle(image, (left, top), (right, bottom), colors[label], 1)
-        cv2.putText(image, "{} [{:.2f}]".format(label, float(confidence)),
-                    (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    colors[label], 2)
-    return image
-
-
-def decode_detection(detections):
-    decoded = []
-    for label, confidence, bbox in detections:
-        confidence = str(round(confidence * 100, 2))
-        decoded.append((str(label), confidence, bbox))
-    return decoded
-
-# https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
-# Malisiewicz et al.
-def non_max_suppression_fast(detections, overlap_thresh):
-    boxes = []
-    for detection in detections:
-        _, _, (x, y, w, h) = detection
-        x1 = x - w / 2
-        y1 = y - h / 2
-        x2 = x + w / 2
-        y2 = y + h / 2
-        boxes.append(np.array([x1, y1, x2, y2]))
-    boxes_array = np.array(boxes)
-
-    # initialize the list of picked indexes
-    pick = []
-    # grab the coordinates of the bounding boxes
-    x1 = boxes_array[:, 0]
-    y1 = boxes_array[:, 1]
-    x2 = boxes_array[:, 2]
-    y2 = boxes_array[:, 3]
-    # compute the area of the bounding boxes and sort the bounding
-    # boxes by the bottom-right y-coordinate of the bounding box
-    area = (x2 - x1 + 1) * (y2 - y1 + 1)
-    idxs = np.argsort(y2)
-    # keep looping while some indexes still remain in the indexes
-    # list
-    while len(idxs) > 0:
-        # grab the last index in the indexes list and add the
-        # index value to the list of picked indexes
-        last = len(idxs) - 1
-        i = idxs[last]
-        pick.append(i)
-        # find the largest (x, y) coordinates for the start of
-        # the bounding box and the smallest (x, y) coordinates
-        # for the end of the bounding box
-        xx1 = np.maximum(x1[i], x1[idxs[:last]])
-        yy1 = np.maximum(y1[i], y1[idxs[:last]])
-        xx2 = np.minimum(x2[i], x2[idxs[:last]])
-        yy2 = np.minimum(y2[i], y2[idxs[:last]])
-        # compute the width and height of the bounding box
-        w = np.maximum(0, xx2 - xx1 + 1)
-        h = np.maximum(0, yy2 - yy1 + 1)
-        # compute the ratio of overlap
-        overlap = (w * h) / area[idxs[:last]]
-        # delete all indexes from the index list that have
-        idxs = np.delete(idxs, np.concatenate(([last],
-                                               np.where(overlap > overlap_thresh)[0])))
-        # return only the bounding boxes that were picked using the
-        # integer data type
-    return [detections[i] for i in pick]
-
-def remove_negatives(detections, class_names, num):
-    """
-    Remove all classes with 0% confidence within the detection
-    """
-    predictions = []
-    for j in range(num):
-        for idx, name in enumerate(class_names):
-            if detections[j].prob[idx] > 0:
-                bbox = detections[j].bbox
-                bbox = (bbox.x, bbox.y, bbox.w, bbox.h)
-                predictions.append((name, detections[j].prob[idx], (bbox)))
-    return predictions
-
-
-def remove_negatives_faster(detections, class_names, num):
-    """
-    Faster version of remove_negatives (very useful when using yolo9000)
-    """
-    predictions = []
-    for j in range(num):
-        if detections[j].best_class_idx == -1:
-            continue
-        name = class_names[detections[j].best_class_idx]
-        bbox = detections[j].bbox
-        bbox = (bbox.x, bbox.y, bbox.w, bbox.h)
-        predictions.append((name, detections[j].prob[detections[j].best_class_idx], bbox))
-    return predictions
-
-
-def detect_image(network, class_names, image, thresh=.5, hier_thresh=.5, nms=.45):
-    """
-        Returns a list with highest confidence class and their bbox
-    """
-    pnum = pointer(c_int(0))
-    predict_image(network, image)
-    detections = get_network_boxes(network, image.w, image.h,
-                                   thresh, hier_thresh, None, 0, pnum, 0)
-    num = pnum[0]
-    if nms:
-        do_nms_sort(detections, num, len(class_names), nms)
-    predictions = remove_negatives(detections, class_names, num)
-    predictions = decode_detection(predictions)
-    free_detections(detections, num)
-    return sorted(predictions, key=lambda x: x[1])
-
-
-if os.name == "posix":
-    cwd = os.path.dirname(__file__)
-    lib = CDLL(cwd + "/libdarknet.so", RTLD_GLOBAL)
-elif os.name == "nt":
-    cwd = os.path.dirname(__file__)
-    os.environ['PATH'] = cwd + ';' + os.environ['PATH']
-    lib = CDLL("darknet.dll", RTLD_GLOBAL)
-else:
-    print("Unsupported OS")
-    exit
-
-lib.network_width.argtypes = [c_void_p]
-lib.network_width.restype = c_int
-lib.network_height.argtypes = [c_void_p]
-lib.network_height.restype = c_int
-
-copy_image_from_bytes = lib.copy_image_from_bytes
-copy_image_from_bytes.argtypes = [IMAGE,c_char_p]
-
-predict = lib.network_predict_ptr
-predict.argtypes = [c_void_p, POINTER(c_float)]
-predict.restype = POINTER(c_float)
-
-set_gpu = lib.cuda_set_device
-init_cpu = lib.init_cpu
-
-make_image = lib.make_image
-make_image.argtypes = [c_int, c_int, c_int]
-make_image.restype = IMAGE
-
-get_network_boxes = lib.get_network_boxes
-get_network_boxes.argtypes = [c_void_p, c_int, c_int, c_float, c_float, POINTER(c_int), c_int, POINTER(c_int), c_int]
-get_network_boxes.restype = POINTER(DETECTION)
-
-make_network_boxes = lib.make_network_boxes
-make_network_boxes.argtypes = [c_void_p]
-make_network_boxes.restype = POINTER(DETECTION)
-
-free_detections = lib.free_detections
-free_detections.argtypes = [POINTER(DETECTION), c_int]
-
-free_batch_detections = lib.free_batch_detections
-free_batch_detections.argtypes = [POINTER(DETNUMPAIR), c_int]
-
-free_ptrs = lib.free_ptrs
-free_ptrs.argtypes = [POINTER(c_void_p), c_int]
-
-network_predict = lib.network_predict_ptr
-network_predict.argtypes = [c_void_p, POINTER(c_float)]
-
-reset_rnn = lib.reset_rnn
-reset_rnn.argtypes = [c_void_p]
-
-load_net = lib.load_network
-load_net.argtypes = [c_char_p, c_char_p, c_int]
-load_net.restype = c_void_p
-
-load_net_custom = lib.load_network_custom
-load_net_custom.argtypes = [c_char_p, c_char_p, c_int, c_int]
-load_net_custom.restype = c_void_p
-
-free_network_ptr = lib.free_network_ptr
-free_network_ptr.argtypes = [c_void_p]
-free_network_ptr.restype = c_void_p
-
-do_nms_obj = lib.do_nms_obj
-do_nms_obj.argtypes = [POINTER(DETECTION), c_int, c_int, c_float]
-
-do_nms_sort = lib.do_nms_sort
-do_nms_sort.argtypes = [POINTER(DETECTION), c_int, c_int, c_float]
-
-free_image = lib.free_image
-free_image.argtypes = [IMAGE]
-
-letterbox_image = lib.letterbox_image
-letterbox_image.argtypes = [IMAGE, c_int, c_int]
-letterbox_image.restype = IMAGE
-
-load_meta = lib.get_metadata
-lib.get_metadata.argtypes = [c_char_p]
-lib.get_metadata.restype = METADATA
-
-load_image = lib.load_image_color
-load_image.argtypes = [c_char_p, c_int, c_int]
-load_image.restype = IMAGE
-
-rgbgr_image = lib.rgbgr_image
-rgbgr_image.argtypes = [IMAGE]
-
-predict_image = lib.network_predict_image
-predict_image.argtypes = [c_void_p, IMAGE]
-predict_image.restype = POINTER(c_float)
-
-predict_image_letterbox = lib.network_predict_image_letterbox
-predict_image_letterbox.argtypes = [c_void_p, IMAGE]
-predict_image_letterbox.restype = POINTER(c_float)
-
-network_predict_batch = lib.network_predict_batch
-network_predict_batch.argtypes = [c_void_p, IMAGE, c_int, c_int, c_int,
-                                   c_float, c_float, POINTER(c_int), c_int, c_int]
-network_predict_batch.restype = POINTER(DETNUMPAIR)
+if __name__ == "__main__":
+    # unconmment next line for an example of batch processing
+    # batch_detection_example()
+    main()
