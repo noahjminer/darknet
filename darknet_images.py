@@ -200,8 +200,9 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
 
 
 def depth_detection_list(image_path, network, class_names, class_colors, thresh):
-    dims = create_depth_map(15, './saturation_disp_1.jpeg', .5)
-
+    thresh = 15
+    compress_rate = .6
+    dims = create_depth_map(thresh, './saturation_disp_1.jpeg', compress_rate)
     prev_time = time.time()
 
     width = []
@@ -235,12 +236,23 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
     # do whole image
     width = darknet.network_width(network)
     height = darknet.network_height(network)
+    decompress_rate_x = shape[1] / width 
+    decompress_rate_y = shape[0] / height
     darknet_image = darknet.make_image(width, height, 3)
     image_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     image_resized = cv2.resize(image_rgb, (width, height),
                                interpolation=cv2.INTER_LINEAR)
-    darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
+    darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
     detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+
+    for index, detection in enumerate(detections): 
+      x, y, w, h = detection[2]
+      x = (x / width) * shape[1]
+      y = (y / height) * shape[0]
+      w = w * decompress_rate_x
+      h = h * decompress_rate_y
+      detections[index] = (detection[0], detection[1], (x, y, w, h))
+
     bboxes.append(detections)
     darknet.free_image(darknet_image)
 
@@ -248,12 +260,14 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
 
     final_detections = []
     for i, item in enumerate(flat_detections):  # removing non person labels for clarity
-        print(item[0])
         if item[0] != 'person':
             continue
         final_detections.append(item)
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, 20)
+    # for outputting depth map variables
+    final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
+
+    final_detections = darknet.non_max_suppression_fast(final_detections, .8)
     print('---------------')
     elapsed_time = time.time() - prev_time
     print('Detection took ', elapsed_time)

@@ -12,6 +12,7 @@ from ctypes import *
 import math
 import random
 import os
+import numpy as np
 
 
 class BOX(Structure):
