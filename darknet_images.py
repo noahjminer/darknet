@@ -156,7 +156,7 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     # orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
 
-    images= sliceImagecv2(dimension, image_path)
+    images= sliceImagecv2(dimension, orig_img)
     bboxes = []
 
     for i, img in enumerate(images):
@@ -200,7 +200,9 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
 
 
 def depth_detection_list(image_path, network, class_names, class_colors, thresh):
-    dims = create_depth_map(20, './saturation_disp_1.jpeg', .5)
+    dims = create_depth_map(15, './saturation_disp_1.jpeg', .5)
+
+    prev_time = time.time()
 
     width = []
     height = []
@@ -211,6 +213,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
     images = sliceImagecv2(dims, orig_img)
+
     bboxes = []
     for i, img in enumerate(images):
         darknet_image = darknet.make_image(width[i], height[i], 3)
@@ -225,13 +228,17 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
         for j, box in enumerate(img_boxes):
             bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
             x, y, w, h = bbox
-            x = dimension[i][0] + x
-            y = dimension[i][2] + y
+            x = dims[i][0] + x
+            y = dims[i][2] + y
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
     # do whole image
-    darknet_image = darknet.make_image(shape[1], shape[0])
-    image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    width = darknet.network_width(network)
+    height = darknet.network_height(network)
+    darknet_image = darknet.make_image(width, height, 3)
+    image_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
+    image_resized = cv2.resize(image_rgb, (width, height),
+                               interpolation=cv2.INTER_LINEAR)
     darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
     detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
     bboxes.append(detections)
@@ -246,7 +253,11 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
             continue
         final_detections.append(item)
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
+    final_detections = darknet.non_max_suppression_fast(final_detections, 20)
+    print('---------------')
+    elapsed_time = time.time() - prev_time
+    print('Detection took ', elapsed_time)
+    print('---------------')
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
@@ -322,23 +333,6 @@ def batch_detection_example():
     for name, image in zip(image_names, images):
         cv2.imwrite(name.replace("data/", ""), image)
 
-
-# creates depth map from mono depth detection image
-# can add params for min rect size
-# threshold is the max diff between avg depth to guide image combination
-def create_depth_map(threshold, depth_map_path):
-    normalize_const = .002
-    image = cv2.imread(depth_map_path)
-    shape = image.shape
-    width = shape[1]
-    height = shape[0]
-
-    for i in range(0, height):
-        for k in range(0, width):
-            print(image[height][width])
-
-
-
 def main():
     args = parser()
     check_arguments_errors(args)
@@ -362,16 +356,13 @@ def main():
             image_name = images[index]
         else:
             image_name = input("Enter Image Path: ")
-        prev_time = time.time()
-        image, detections = image_detection_list(
+        image, detections = depth_detection_list(
             image_name, network, class_names, class_colors, args.thresh
             )
         cv2.imwrite('../results.jpg', image)
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         darknet.print_detections(detections, args.ext_output)
-        elapsed = time.time() - prev_time
-        print(f'Processed in {elapsed} seconds.')
         if not args.dont_show:
             cv2.imshow('Inference', image)
             if cv2.waitKey() & 0xFF == ord('q'):

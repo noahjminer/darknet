@@ -1,6 +1,7 @@
 import cv2
 import math
 import numpy as np
+import time
 
 
 # Finds avg distance of a slice
@@ -25,7 +26,10 @@ def find_avg_distance(image, dim):
 # hard coded to 6x8 with reasoning that resolution will be ~3000x2000
 # prob shouldnt compress here and also could have smarter dimensions
 def create_depth_map(no_comp_thresh, image_path, compression_rate):
+    prev_time = time.time()
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    decompress_rate = 1/compression_rate
+
     shape = image.shape
     height = int(shape[0] * compression_rate)
     width = int(shape[1] * compression_rate)
@@ -45,9 +49,15 @@ def create_depth_map(no_comp_thresh, image_path, compression_rate):
             dim = [(x-1)*slice_dim_x, x*slice_dim_x, (y-1)*slice_dim_y, y*slice_dim_y]
             avg = find_avg_distance(image, dim)
             if avg < no_comp_thresh:
+                for index, num in enumerate(dim):
+                    dim[index] = int(num * decompress_rate)
                 no_comp_dims.append(dim)
             col_avg.append(avg)
         avgs.append(col_avg)
+    print('---------------')
+    elapsed_time = time.time() - prev_time
+    print('Depth map took ', elapsed_time)
+    print('---------------')
     return no_comp_dims
     # for i in avgs:
     #     print(i)
