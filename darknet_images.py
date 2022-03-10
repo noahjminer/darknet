@@ -246,8 +246,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, thresh)
             continue
         final_detections.append(item)
 
-    
-
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
