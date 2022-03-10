@@ -12,6 +12,7 @@ from ctypes import *
 import math
 import random
 import os
+import numpy as np
 
 
 class BOX(Structure):
@@ -139,7 +140,7 @@ def decode_detection(detections):
 def non_max_suppression_fast(detections, overlap_thresh):
     boxes = []
     for detection in detections:
-        _, _, _, (x, y, w, h) = detection
+        _, _, (x, y, w, h) = detection
         x1 = x - w / 2
         y1 = y - h / 2
         x2 = x + w / 2

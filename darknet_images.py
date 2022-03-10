@@ -197,10 +197,11 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     
     final_detections = []
     for i, item in enumerate(flat_detections):  # removing non person labels for clarity
-      print(item[0])
-      if item[0] != 'person':
-        continue
-      final_detections.append(item)
+        if item[0] != 'person':
+            continue
+        final_detections.append(item)
+
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
     
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
@@ -305,17 +306,20 @@ def main():
         image, detections = image_detection_list(
             image_name, network, class_names, class_colors, args.thresh
             )
-        cv2.imwrite('../results.jpg', image)
+        
+        save_path = image_name[:len(image_name)-4] + "_result.jpg"
+        cv2.imwrite(save_path, image)
+        
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
-        darknet.print_detections(detections, args.ext_output)
+        # darknet.print_detections(detections, args.ext_output)
         elapsed = time.time() - prev_time
         print(f'Processed in {elapsed} seconds.')
-        if not args.dont_show:
-            cv2.imshow('Inference', image)
-            if cv2.waitKey() & 0xFF == ord('q'):
-                break
-        cv2.wait(0)
+        # if not args.dont_show:
+        #     cv2.imshow('Inference', image)
+        #     if cv2.waitKey() & 0xFF == ord('q'):
+        #         break
+        # cv2.wait(0)
         index += 1
 
 
