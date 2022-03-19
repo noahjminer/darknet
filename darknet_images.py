@@ -2,10 +2,10 @@ import argparse
 import os
 import glob
 import random
-import darknet
 import time
 import cv2
 import numpy as np
+import darknet
 import math
 
 from depth_map_scripts import create_depth_map
@@ -200,10 +200,9 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
-def depth_detection_list(image_path, network, class_names, class_colors, thresh):
-    thresh = 15
+def depth_detection_list(image_path, network, class_names, class_colors, depth_path, thresh):
     compress_rate = .6
-    dims = create_depth_map(thresh, './saturation_disp_1.jpeg', compress_rate)
+    dims = create_depth_map(thresh, depth_path, compress_rate)
     prev_time = time.time()
 
     width = []
@@ -347,6 +346,7 @@ def batch_detection_example():
                                            class_colors, batch_size=batch_size)
     for name, image in zip(image_names, images):
         cv2.imwrite(name.replace("data/", ""), image)
+
 
 def main():
     args = parser()

@@ -1,5 +1,11 @@
 from darknet_images import depth_detection_list, image_detection_list
+from monodepth2.test_simple import create_depth_image
+import darknet
 import argparse
+import random
+import os
+import cv2
+import time
 
 
 def parse_args():
@@ -16,28 +22,88 @@ def parse_args():
                         default='baseline')
     parser.add_argument('--video', type=bool, help='video or image? default to image',
                        default=False)
-    parser.add_argument('--slicesize', type=int,
+    parser.add_argument('--slice_size', type=int,
                         help='slice size in pixels (square)',
                         default=500)
     parser.add_argument('--threshold', type=float,
                         help='depth threshold',
-                        default=.15)
+                        default=15)
+    parser.add_argument('--model_name', type=str,
+                        help='name of a pretrained model to use',
+                        choices=[
+                            "mono_640x192",
+                            "stereo_640x192",
+                            "mono+stereo_640x192",
+                            "mono_no_pt_640x192",
+                            "stereo_no_pt_640x192",
+                            "mono+stereo_no_pt_640x192",
+                            "mono_1024x320",
+                            "stereo_1024x320",
+                            "mono+stereo_1024x320"],
+                        default="mono+stereo_640x192")
+    parser.add_argument("--config_file", default="./cfg/yolov4.cfg",
+                        help="path to config file")
+    parser.add_argument("--data_file", default="./cfg/coco.data",
+                        help="path to data file")
+    parser.add_argument("--thresh", type=float, default=.25,
+                        help="remove detections with lower confidence")
     return parser.parse_args()
 
 
-def baseline_image(args):
-    print('Beginning baseline')
-    slice_size = args.slicesize
+def baseline(args):
+    print('Baseline')
 
 
-def baseline_video(args):
-    print('Baseline: Video')
+def generate_depth_image(args, file):
+    prev = time.time()
+    print_update(f'Generating depth image for {file}')
+    output = create_depth_image(args, file)
+    diff = time.time() - prev
+    print_update(f'Generation complete in {diff}, output at {output}')
+    return output
 
 
 def depth(args):
-    print('Depth')
-    # Calibration
-    # Detection
+    files = []
+
+    assert args.image_path is not None
+
+    if args.batch:
+        files = get_path_list_from_dir(args.image_path)
+    else:
+        files.append(args.image_path)
+
+    # create darknet things
+    random.seed(3)  # deterministic bbox colors
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=args.batch_size
+    )
+
+    if args.video:
+        for file in files:
+            generate_depth_image(args, file)
+    else:
+        for file in files:
+            depth_path = generate_depth_image(args, file)
+            depth_detection_list(file, network, class_names, class_colors, depth_path, args.threshold)
+
+# ----------- utils ------------
+
+
+def get_path_list_from_dir(path):
+    files = os.listdir(path)
+    for index, file in enumerate(files):
+        files[index] = os.path.join(path, file)
+    return files
+
+
+def print_update(msg):
+    print('----------------------')
+    print(msg)
+    print('----------------------')
 
 
 if __name__ == '__main__':
