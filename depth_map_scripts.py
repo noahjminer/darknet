@@ -11,6 +11,7 @@ c1 = np.array([0, 0, 0])
 c2 = np.array([255, 255, 0])
 
 
+# need to check bounds
 def find_avg_distance(image, dim):
     total = 0
     count = 0
@@ -38,14 +39,16 @@ def create_depth_map(no_comp_thresh, image_path, compression_rate):
     image_resized = cv2.resize(image, dsize)
     height = image_resized.shape[0]
     width = image_resized.shape[1]
-    slice_dim_x = int(width / 8)
-    slice_dim_y = int(height / 6)
+    # Smarter dimensions needed
+    slice_dim_x = int(width / 5)
+    slice_dim_y = int(height / 8)
 
     avgs = []
     no_comp_dims = []
     for x in range(1, 9):
         col_avg = []
         for y in range(1, 7):
+            # need to do bound checking here
             dim = [(x-1)*slice_dim_x, x*slice_dim_x, (y-1)*slice_dim_y, y*slice_dim_y]
             avg = find_avg_distance(image, dim)
             if avg < no_comp_thresh:

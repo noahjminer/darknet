@@ -15,9 +15,9 @@ def parser():
     parser = argparse.ArgumentParser(description="YOLO Object Detection")
     parser.add_argument("--input", type=str, default="",
                         help="image source. It can be a single image, a"
-                        "txt with paths to them, or a folder. Image valid"
-                        " formats are jpg, jpeg or png."
-                        "If no input is given, ")
+                             "txt with paths to them, or a folder. Image valid"
+                             " formats are jpg, jpeg or png."
+                             "If no input is given, ")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
     parser.add_argument("--weights", default="yolov4.weights",
@@ -40,13 +40,13 @@ def parser():
 def check_arguments_errors(args):
     assert 0 < args.thresh < 1, "Threshold should be a float between zero and one (non-inclusive)"
     if not os.path.exists(args.config_file):
-        raise(ValueError("Invalid config path {}".format(os.path.abspath(args.config_file))))
+        raise (ValueError("Invalid config path {}".format(os.path.abspath(args.config_file))))
     if not os.path.exists(args.weights):
-        raise(ValueError("Invalid weight path {}".format(os.path.abspath(args.weights))))
+        raise (ValueError("Invalid weight path {}".format(os.path.abspath(args.weights))))
     if not os.path.exists(args.data_file):
-        raise(ValueError("Invalid data file path {}".format(os.path.abspath(args.data_file))))
+        raise (ValueError("Invalid data file path {}".format(os.path.abspath(args.data_file))))
     if args.input and not os.path.exists(args.input):
-        raise(ValueError("Invalid image path {}".format(os.path.abspath(args.input))))
+        raise (ValueError("Invalid image path {}".format(os.path.abspath(args.input))))
 
 
 def check_batch_shape(images, batch_size):
@@ -77,8 +77,8 @@ def load_images(images_path):
     else:
         return glob.glob(
             os.path.join(images_path, "*.jpg")) + \
-            glob.glob(os.path.join(images_path, "*.png")) + \
-            glob.glob(os.path.join(images_path, "*.jpeg"))
+               glob.glob(os.path.join(images_path, "*.png")) + \
+               glob.glob(os.path.join(images_path, "*.jpeg"))
 
 
 def prepare_batch(images, network, channels=3):
@@ -94,7 +94,7 @@ def prepare_batch(images, network, channels=3):
         darknet_images.append(custom_image)
 
     batch_array = np.concatenate(darknet_images, axis=0)
-    batch_array = np.ascontiguousarray(batch_array.flat, dtype=np.float32)/255.0
+    batch_array = np.ascontiguousarray(batch_array.flat, dtype=np.float32) / 255.0
     darknet_images = batch_array.ctypes.data_as(darknet.POINTER(darknet.c_float))
     return darknet.IMAGE(width, height, channels, darknet_images)
 
@@ -125,7 +125,7 @@ def image_detection(image_path, network, class_names, class_colors, thresh):
 # known problems:
 #   If image size is just over slice width or height,
 #   it cuts off images.
-dimension = [[0,500,0,500],[500,1500,0,1000],[0,4096,0,2786]]
+dimension = [[0, 500, 0, 500], [500, 1500, 0, 1000], [0, 4096, 0, 2786]]
 
 
 def sliceImagecv2(dimension, image):
@@ -133,21 +133,21 @@ def sliceImagecv2(dimension, image):
     for dim in dimension:
         newSlice = image[dim[2]:dim[3], dim[0]:dim[1]]
         slices.append(newSlice)
-        
+
     return slices
 
 
 def image_detection_list(image_path, network, class_names, class_colors, thresh):
     # Darknet doesn't accept numpy images.
     # Create one with image we reuse for each detect
-    
-    #width = slice_width
-    #height = slice_height
+
+    # width = slice_width
+    # height = slice_height
     width = []
     height = []
     for dim in dimension:
-        width.append(dim[1]-dim[0])
-        height.append(dim[3]-dim[2])
+        width.append(dim[1] - dim[0])
+        height.append(dim[3] - dim[2])
 
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
@@ -156,27 +156,23 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     # orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
 
-    images= sliceImagecv2(dimension, orig_img)
+    images = sliceImagecv2(dimension, orig_img)
     bboxes = []
 
     for i, img in enumerate(images):
         darknet_image = darknet.make_image(width[i], height[i], 3)
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
+
         # image_resized = cv2.resize(image_rgb, (width[i], height[i]), interpolation=cv2.INTER_LINEAR)
-        
+
         darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
         bboxes.append(detections)
         darknet.free_image(darknet_image)
 
-    
-
     # CORRECT BOUNDING BOX COORDINATES
     # TODO: BOUNDING BOX COMBINATIONS
     # can edit once sizes are uniform, or collect array of sizes.
-
-    
 
     for i, img_boxes in enumerate(bboxes):
         for j, box in enumerate(img_boxes):
@@ -185,10 +181,9 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
             x = dimension[i][0] + x
             y = dimension[i][2] + y
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
-    
 
     flat_detections = [item for sub_list in bboxes for item in sub_list]
-    
+
     final_detections = []
     for i, item in enumerate(flat_detections):  # removing non person labels for clarity
         if item[0] != 'person':
@@ -196,13 +191,13 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
         final_detections.append(item)
 
     final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
-    
+
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
-def depth_detection_list(image_path, network, class_names, class_colors, depth_path, thresh):
+def depth_detection_list(image_path, network, class_names, class_colors, depth_path, depth_thresh, img_thresh):
     compress_rate = .6
-    dims = create_depth_map(thresh, depth_path, compress_rate)
+    dims = create_depth_map(depth_thresh, depth_path, compress_rate)
     prev_time = time.time()
 
     width = []
@@ -210,6 +205,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
     for dim in dims:
         width.append(dim[1] - dim[0])
         height.append(dim[3] - dim[2])
+    print(dims)
 
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
@@ -220,7 +216,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
         darknet_image = darknet.make_image(width[i], height[i], 3)
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
-        detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
+        detections = darknet.detect_image(network, class_names, darknet_image, thresh=img_thresh)
         bboxes.append(detections)
         darknet.free_image(darknet_image)
 
@@ -236,22 +232,22 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
     # do whole image
     width = darknet.network_width(network)
     height = darknet.network_height(network)
-    decompress_rate_x = shape[1] / width 
+    decompress_rate_x = shape[1] / width
     decompress_rate_y = shape[0] / height
     darknet_image = darknet.make_image(width, height, 3)
     image_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     image_resized = cv2.resize(image_rgb, (width, height),
                                interpolation=cv2.INTER_LINEAR)
     darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
-    detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
-
-    for index, detection in enumerate(detections): 
-      x, y, w, h = detection[2]
-      x = (x / width) * shape[1]
-      y = (y / height) * shape[0]
-      w = w * decompress_rate_x
-      h = h * decompress_rate_y
-      detections[index] = (detection[0], detection[1], (x, y, w, h))
+    detections = darknet.detect_image(network, class_names, darknet_image, thresh=img_thresh)
+    print(detections)
+    for index, detection in enumerate(detections):
+        x, y, w, h = detection[2]
+        x = (x / width) * shape[1]
+        y = (y / height) * shape[0]
+        w = w * decompress_rate_x
+        h = h * decompress_rate_y
+        detections[index] = (detection[0], detection[1], (x, y, w, h))
 
     bboxes.append(detections)
     darknet.free_image(darknet_image)
@@ -265,9 +261,10 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
         final_detections.append(item)
 
     # for outputting depth map variables
-    final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
+    # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
 
     final_detections = darknet.non_max_suppression_fast(final_detections, .8)
+    print(final_detections)
     print('---------------')
     elapsed_time = time.time() - prev_time
     print('Detection took ', elapsed_time)
@@ -299,7 +296,7 @@ def image_classification(image, network, class_names):
     height = darknet.network_height(network)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_resized = cv2.resize(image_rgb, (width, height),
-                                interpolation=cv2.INTER_LINEAR)
+                               interpolation=cv2.INTER_LINEAR)
     darknet_image = darknet.make_image(width, height, 3)
     darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
     detections = darknet.predict_image(network, darknet_image)
@@ -314,7 +311,7 @@ def convert2relative(image, bbox):
     """
     x, y, w, h = bbox
     height, width, _ = image.shape
-    return x/width, y/height, w/width, h/height
+    return x / width, y / height, w / width, h / height
 
 
 def save_annotations(name, image, detections, class_names):
@@ -342,8 +339,8 @@ def batch_detection_example():
     )
     image_names = ['data/horses.jpg', 'data/horses.jpg', 'data/eagle.jpg']
     images = [cv2.imread(image) for image in image_names]
-    images, detections,  = batch_detection(network, images, class_names,
-                                           class_colors, batch_size=batch_size)
+    images, detections, = batch_detection(network, images, class_names,
+                                          class_colors, batch_size=batch_size)
     for name, image in zip(image_names, images):
         cv2.imwrite(name.replace("data/", ""), image)
 
@@ -373,11 +370,11 @@ def main():
             image_name = input("Enter Image Path: ")
         image, detections = depth_detection_list(
             image_name, network, class_names, class_colors, args.thresh
-            )
-        
-        save_path = image_name[:len(image_name)-4] + "_result.jpg"
+        )
+
+        save_path = image_name[:len(image_name) - 4] + "_result.jpg"
         cv2.imwrite(save_path, image)
-        
+
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         # darknet.print_detections(detections, args.ext_output)

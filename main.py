@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument('--slice_size', type=int,
                         help='slice size in pixels (square)',
                         default=500)
-    parser.add_argument('--threshold', type=float,
+    parser.add_argument('--depth_threshold', type=float,
                         help='depth threshold',
                         default=15)
     parser.add_argument('--model_name', type=str,
@@ -47,6 +47,10 @@ def parse_args():
                         help="path to data file")
     parser.add_argument("--thresh", type=float, default=.25,
                         help="remove detections with lower confidence")
+    parser.add_argument("--weights", default="yolov4.weights",
+                        help="yolo weights path")
+    parser.add_argument("--batch_size", default=1, type=int,
+                        help="number of images to be processed at the same time")
     return parser.parse_args()
 
 
@@ -81,14 +85,17 @@ def depth(args):
         args.weights,
         batch_size=args.batch_size
     )
+    print(class_colors)
 
     if args.video:
-        for file in files:
-            generate_depth_image(args, file)
+        for f in files:
+            generate_depth_image(args, f)
     else:
-        for file in files:
-            depth_path = generate_depth_image(args, file)
-            depth_detection_list(file, network, class_names, class_colors, depth_path, args.threshold)
+        for f in files:
+            depth_path = generate_depth_image(args, f)
+            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, 15, .25)
+            cv2.imwrite('result.jpg', image)
+
 
 # ----------- utils ------------
 
