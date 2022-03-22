@@ -98,7 +98,8 @@ def depth(args):
         for f in files:
             depth_path = generate_depth_image(args, f)
             image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
-            cv2.imwrite('result.jpg', image)
+            new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
+            cv2.imwrite(new_path, image)
 
 
 # ----------- utils ------------
