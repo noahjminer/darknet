@@ -45,14 +45,14 @@ def parse_args():
                         help="path to config file")
     parser.add_argument("--data_file", default="./cfg/coco.data",
                         help="path to data file")
-    parser.add_argument("--thresh", type=float, default=.25,
+    parser.add_argument("--detection_thresh", type=float, default=.25,
                         help="remove detections with lower confidence")
     parser.add_argument("--weights", default="yolov4.weights",
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
     parser.add_argument("--proportion_thresh", type=float, default=.3,
-                        help="remove detections with lower confidence")
+                        help="the proportion of a slice that further than the depth_threshold")
     return parser.parse_args()
 
 
@@ -89,7 +89,7 @@ def depth(args):
     )
 
     depth_threshold = args.depth_threshold
-    darknet_threshold = args.thresh
+    darknet_threshold = args.detection_thresh
 
     if args.video:
         for f in files:
