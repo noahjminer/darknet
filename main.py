@@ -40,7 +40,7 @@ def parse_args():
                             "mono_1024x320",
                             "stereo_1024x320",
                             "mono+stereo_1024x320"],
-                        default="mono+stereo_640x192")
+                        default="mono+stereo_1024x320")
     parser.add_argument("--config_file", default="./cfg/yolov4.cfg",
                         help="path to config file")
     parser.add_argument("--data_file", default="./cfg/coco.data",
