@@ -43,23 +43,28 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
     decompress_rate = 1 / compression_rate
 
     shape = image.shape
-    height = int(shape[0] * compression_rate)
-    width = int(shape[1] * compression_rate)
+    height = int(shape[0])
+    width = int(shape[1])
 
     dsize = (width, height)
-    image_resized = cv2.resize(image, dsize)
-    height = image_resized.shape[0]
-    width = image_resized.shape[1]
+    # image_resized = cv2.resize(image, dsize)
+    # height = image_resized.shape[0]
+    # width = image_resized.shape[1]
     # Smarter dimensions needed
 
-    slice_dim_x = int(width / 8)
-    slice_dim_y = int(height / 6)
+    num_slice_x = math.floor(width / 608)
+    num_slice_y = math.floor(height / 608)
+    remainder_x = width % 608
+    remainder_y = height % 608
+
+    slice_dim_x = math.ceil(width / num_slice_x)
+    slice_dim_y = math.ceil(height / num_slice_y)
 
     avgs = []
     no_comp_dims = []
-    for x in range(1, 9):
+    for x in range(1, num_slice_x + 1):
         col_avg = []
-        for y in range(1, 7):
+        for y in range(1, num_slice_y + 1):
             # need to do bound checking here
             left = (x - 1) * slice_dim_x
             right = x * slice_dim_x
@@ -71,8 +76,8 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
                 right = width - 1
             dim = [left, right, top, bottom]
             if create_depth_mask(image, dim, no_comp_thresh, proportion_thresh):
-                for index, num in enumerate(dim):
-                    dim[index] = int(num * decompress_rate)
+                # for index, num in enumerate(dim):
+                    # dim[index] = int(num * decompress_rate)
                 no_comp_dims.append(dim)
     print('---------------')
     elapsed_time = time.time() - prev_time

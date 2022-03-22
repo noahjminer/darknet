@@ -1,3 +1,4 @@
+from numpy.ma.core import fabs
 from darknet_images import depth_detection_list, image_detection_list
 from monodepth2.test_simple import create_depth_image
 import darknet
@@ -12,7 +13,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         'Run different solutions / models with argument parse.'
     )
-    parser.add_argument('--image_path', type=str, help='path to image/video, if batch is true, then directory of images')
+    parser.add_argument('--image_path', type=str,
+                        help='path to image/video, if batch is true, then directory of images')
     parser.add_argument('--batch', type=bool,
                         help='If true, run on group of images / videos in sequence.',
                         default=False)
@@ -21,7 +23,7 @@ def parse_args():
                         choices=['baseline', 'depth'],
                         default='baseline')
     parser.add_argument('--video', type=bool, help='video or image? default to image',
-                       default=False)
+                        default=False)
     parser.add_argument('--slice_size', type=int,
                         help='slice size in pixels (square)',
                         default=500)
@@ -60,10 +62,10 @@ def baseline(args):
     print('Baseline')
 
 
-def generate_depth_image(args, file):
+def generate_depth_image(args, f):
     prev = time.time()
-    print_update(f'Generating depth image for {file}')
-    output = create_depth_image(args, file)
+    print_update(f'Generating depth image for {f}')
+    output = create_depth_image(args, f)
     diff = time.time() - prev
     print_update(f'Generation complete in {diff}, output at {output}')
     return output
@@ -73,7 +75,6 @@ def depth(args):
     files = []
 
     assert args.image_path is not None
-
     if args.batch:
         files = get_path_list_from_dir(args.image_path)
     else:
@@ -95,10 +96,11 @@ def depth(args):
         for f in files:
             generate_depth_image(args, f)
     else:
-        for f in files:
+        for index, f in enumerate(files):
             depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
-            cv2.imwrite('result.jpg', image)
+            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold,
+                                                     darknet_threshold, args.proportion_thresh)
+            cv2.imwrite(f'./result{index}.jpg', image)
 
 
 # ----------- utils ------------
@@ -106,8 +108,8 @@ def depth(args):
 
 def get_path_list_from_dir(path):
     files = os.listdir(path)
-    for index, file in enumerate(files):
-        files[index] = os.path.join(path, file)
+    for index, f in enumerate(files):
+        files[index] = os.path.join(path, f)
     return files
 
 

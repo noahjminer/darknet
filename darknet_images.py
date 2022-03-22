@@ -207,22 +207,18 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
         width.append(dim[1] - dim[0])
         height.append(dim[3] - dim[2])
 
-    print('-----------')
-    print(dims)
-    print('-----------')
-
+    slice_time = time.time()
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
-    images = sliceImagecv2(dims, orig_img)
 
     bboxes = []
-    for i, img in enumerate(images):
-        darknet_image = darknet.make_image(width[i], height[i], 3)
-        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    darknet_image = darknet.make_image(width[0], height[0], 3)
+    for i, dim in enumerate(dims):
+        image_rgb = cv2.cvtColor(orig_img[dim[2]:dim[3], dim[0]:dim[1]], cv2.COLOR_BGR2RGB)
         darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=img_thresh)
         bboxes.append(detections)
-        darknet.free_image(darknet_image)
+    darknet.free_image(darknet_image)
 
     # can edit once sizes are uniform, or collect array of sizes.
     for i, img_boxes in enumerate(bboxes):
@@ -233,7 +229,9 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
             y = dims[i][2] + y
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
+    print('slices done in ', time.time() - slice_time)
     # do whole image
+    whole_time = time.time()
     width = darknet.network_width(network)
     height = darknet.network_height(network)
     decompress_rate_x = shape[1] / width
@@ -244,7 +242,6 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
                                interpolation=cv2.INTER_LINEAR)
     darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
     detections = darknet.detect_image(network, class_names, darknet_image, thresh=img_thresh)
-    detections = []
     for index, detection in enumerate(detections):
         x, y, w, h = detection[2]
         x = (x / width) * shape[1]
@@ -255,6 +252,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
 
     bboxes.append(detections)
     darknet.free_image(darknet_image)
+    print(time.time() - whole_time, ' seconds for whole image')
 
     flat_detections = [item for sub_list in bboxes for item in sub_list]
 
@@ -267,7 +265,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
     # for outputting depth map variables
     # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
 
-    # final_detections = darknet.non_max_suppression_fast(final_detections, .8)
+    final_detections = darknet.non_max_suppression_fast(final_detections, .8)
     print(final_detections)
     print('---------------')
     elapsed_time = time.time() - prev_time
@@ -373,10 +371,11 @@ def main():
             image_name = images[index]
         else:
             image_name = input("Enter Image Path: ")
-        image, detections = depth_detection_list(
+        prev_time = time.time()
+        image, detections = image_detection(
             image_name, network, class_names, class_colors, args.thresh
         )
-        prev_time = time.time()
+        elapsed = time.time() - prev_time
 
         save_path = image_name[:len(image_name) - 4] + "_result.jpg"
         cv2.imwrite(save_path, image)
@@ -384,7 +383,6 @@ def main():
         if args.save_labels:
             save_annotations(image_name, image, detections, class_names)
         # darknet.print_detections(detections, args.ext_output)
-        elapsed = time.time() - prev_time
         print(f'Processed in {elapsed} seconds.')
         # if not args.dont_show:
         #     cv2.imshow('Inference', image)
