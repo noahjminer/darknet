@@ -26,7 +26,7 @@ def parse_args():
                         help='slice size in pixels (square)',
                         default=500)
     parser.add_argument('--depth_threshold', type=float,
-                        help='depth threshold',
+                        help='depth threshold, with 0 is furthest ditance away',
                         default=15)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
@@ -46,13 +46,13 @@ def parse_args():
     parser.add_argument("--data_file", default="./cfg/coco.data",
                         help="path to data file")
     parser.add_argument("--detection_thresh", type=float, default=.25,
-                        help="remove detections with lower confidence")
+                        help="remove detections with lower confidence, value from 0.0 to 1.0, with 0.0 is lowest certainty")
     parser.add_argument("--weights", default="yolov4.weights",
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
     parser.add_argument("--proportion_thresh", type=float, default=.3,
-                        help="the proportion of a slice that further than the depth_threshold")
+                        help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
     return parser.parse_args()
 
 
