@@ -8,7 +8,7 @@ import numpy as np
 import darknet
 import math
 
-from depth_map_scripts import create_depth_map
+from depth_map_scripts import create_depth_map_with_avg, create_depth_map_with_threshold
 
 
 def parser():
@@ -195,9 +195,10 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
-def depth_detection_list(image_path, network, class_names, class_colors, depth_path, depth_thresh, img_thresh):
-    compress_rate = .6
-    dims = create_depth_map(depth_thresh, depth_path, compress_rate)
+def depth_detection_list(image_path, network, class_names, class_colors, depth_path, depth_thresh, img_thresh,
+                         proportion_thresh):
+    compress_rate = .5
+    dims = create_depth_map_with_threshold(depth_thresh, depth_path, compress_rate, proportion_thresh)
     prev_time = time.time()
 
     width = []
@@ -205,7 +206,10 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
     for dim in dims:
         width.append(dim[1] - dim[0])
         height.append(dim[3] - dim[2])
+
+    print('-----------')
     print(dims)
+    print('-----------')
 
     orig_img = cv2.imread(image_path)
     shape = orig_img.shape
@@ -240,7 +244,7 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
                                interpolation=cv2.INTER_LINEAR)
     darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
     detections = darknet.detect_image(network, class_names, darknet_image, thresh=img_thresh)
-    print(detections)
+    detections = []
     for index, detection in enumerate(detections):
         x, y, w, h = detection[2]
         x = (x / width) * shape[1]
@@ -263,13 +267,14 @@ def depth_detection_list(image_path, network, class_names, class_colors, depth_p
     # for outputting depth map variables
     # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, .8)
+    # final_detections = darknet.non_max_suppression_fast(final_detections, .8)
     print(final_detections)
     print('---------------')
     elapsed_time = time.time() - prev_time
     print('Detection took ', elapsed_time)
     print('---------------')
-    return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
+    image = darknet.draw_slices(dims, orig_img, class_colors)
+    return darknet.draw_boxes(final_detections, image, class_colors), final_detections
 
 
 def batch_detection(network, images, class_names, class_colors,
@@ -371,6 +376,7 @@ def main():
         image, detections = depth_detection_list(
             image_name, network, class_names, class_colors, args.thresh
         )
+        prev_time = time.time()
 
         save_path = image_name[:len(image_name) - 4] + "_result.jpg"
         cv2.imwrite(save_path, image)

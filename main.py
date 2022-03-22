@@ -51,6 +51,8 @@ def parse_args():
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
+    parser.add_argument("--proportion_thresh", type=float, default=.3,
+                        help="remove detections with lower confidence")
     return parser.parse_args()
 
 
@@ -85,7 +87,9 @@ def depth(args):
         args.weights,
         batch_size=args.batch_size
     )
-    print(class_colors)
+
+    depth_threshold = args.depth_threshold
+    darknet_threshold = args.thresh
 
     if args.video:
         for f in files:
@@ -93,7 +97,7 @@ def depth(args):
     else:
         for f in files:
             depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, 15, .25)
+            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
             cv2.imwrite('result.jpg', image)
 
 
