@@ -28,7 +28,7 @@ def parse_args():
                         help='slice size in pixels (square)',
                         default=500)
     parser.add_argument('--depth_threshold', type=float,
-                        help='depth threshold',
+                        help='depth threshold, with 0 is furthest ditance away',
                         default=15)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
@@ -42,19 +42,19 @@ def parse_args():
                             "mono_1024x320",
                             "stereo_1024x320",
                             "mono+stereo_1024x320"],
-                        default="mono+stereo_640x192")
+                        default="mono+stereo_1024x320")
     parser.add_argument("--config_file", default="./cfg/yolov4.cfg",
                         help="path to config file")
     parser.add_argument("--data_file", default="./cfg/coco.data",
                         help="path to data file")
-    parser.add_argument("--thresh", type=float, default=.25,
-                        help="remove detections with lower confidence")
+    parser.add_argument("--detection_thresh", type=float, default=.25,
+                        help="remove detections with lower confidence, value from 0.0 to 1.0, with 0.0 is lowest certainty")
     parser.add_argument("--weights", default="yolov4.weights",
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
     parser.add_argument("--proportion_thresh", type=float, default=.3,
-                        help="remove detections with lower confidence")
+                        help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
     return parser.parse_args()
 
 
@@ -90,7 +90,7 @@ def depth(args):
     )
 
     depth_threshold = args.depth_threshold
-    darknet_threshold = args.thresh
+    darknet_threshold = args.detection_thresh
 
     if args.video:
         for f in files:
@@ -98,9 +98,9 @@ def depth(args):
     else:
         for index, f in enumerate(files):
             depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold,
-                                                     darknet_threshold, args.proportion_thresh)
-            cv2.imwrite(f'./result{index}.jpg', image)
+            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
+            cv2.imwrite(new_path, image)
 
 
 # ----------- utils ------------
