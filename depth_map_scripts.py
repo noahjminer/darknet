@@ -52,10 +52,9 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
     # width = image_resized.shape[1]
     # Smarter dimensions needed
 
+    # 608 is what darknet compresses images to
     num_slice_x = math.floor(width / 608)
     num_slice_y = math.floor(height / 608)
-    remainder_x = width % 608
-    remainder_y = height % 608
 
     slice_dim_x = math.ceil(width / num_slice_x)
     slice_dim_y = math.ceil(height / num_slice_y)
@@ -65,15 +64,16 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
     for x in range(1, num_slice_x + 1):
         col_avg = []
         for y in range(1, num_slice_y + 1):
-            # need to do bound checking here
             left = (x - 1) * slice_dim_x
             right = x * slice_dim_x
             top = (y - 1) * slice_dim_y
             bottom = y * slice_dim_y
             if bottom > height:
                 bottom = height - 1
+                top = bottom - slice_dim_y
             if right > width:
                 right = width - 1
+                left = right - slice_dim_x
             dim = [left, right, top, bottom]
             if create_depth_mask(image, dim, no_comp_thresh, proportion_thresh):
                 # for index, num in enumerate(dim):
@@ -84,8 +84,6 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
     print('Depth map took ', elapsed_time)
     print('---------------')
     return no_comp_dims
-    # for i in avgs:
-    #     print(i)
 
 
 # compresses depth image and finds avg for all slices in a 6x8 grid. Creates the dimensions as well

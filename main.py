@@ -82,12 +82,12 @@ def depth(args):
 
     # create darknet things
     random.seed(3)  # deterministic bbox colors
-    network, class_names, class_colors = darknet.load_network(
-        args.config_file,
-        args.data_file,
-        args.weights,
-        batch_size=args.batch_size
-    )
+    # network, class_names, class_colors = darknet.load_network(
+    #    args.config_file,
+    #    args.data_file,
+    #    args.weights,
+    #    batch_size=args.batch_size
+    #)
 
     depth_threshold = args.depth_threshold
     darknet_threshold = args.detection_thresh
@@ -98,7 +98,7 @@ def depth(args):
     else:
         for index, f in enumerate(files):
             depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, network, class_names, class_colors, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            image, detections = depth_detection_list(f, args, None, None, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             cv2.imwrite(new_path, image)
 
