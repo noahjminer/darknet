@@ -128,6 +128,17 @@ def draw_boxes(detections, image, colors):
     return image
 
 
+def draw_slices(dims, image, colors):
+    import cv2
+    for bbox in dims:
+        left, right, top, bottom = bbox
+        cv2.rectangle(image, (left, top), (right, bottom), colors['handbag'], 1)
+        cv2.putText(image, "{} [{} {} {} {}]".format('SLICE', left, right, top, bottom),
+                    (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    colors['handbag'], 2)
+    return image
+
+
 def decode_detection(detections):
     decoded = []
     for label, confidence, bbox in detections:
