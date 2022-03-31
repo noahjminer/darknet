@@ -56,6 +56,8 @@ def parse_args():
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
+    parser.add_argument("--refresh_dims", default=False, type=bool
+                        )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
     return parser.parse_args()
@@ -74,7 +76,22 @@ def generate_depth_image(args, f):
     return output
 
 
-def depth(args):
+def depth_mask(args):
+    assert args.image_path is not None
+
+    random.seed(3)
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=args.batch_size
+    )
+
+
+
+
+# Lower calibration time - do it in seperate process
+def depth_slice(args):
     files = []
 
     assert args.image_path is not None
@@ -151,7 +168,9 @@ if __name__ == '__main__':
     if args.method == 'baseline':
         baseline(args)
     elif args.method == 'depth':
-        depth(args)
+        depth_slice(args)
+    elif args.method == 'depth_mask':
+        depth_mask(args)
 
 
 
