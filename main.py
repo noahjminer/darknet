@@ -92,13 +92,18 @@ def depth(args):
     depth_threshold = args.depth_threshold
     darknet_threshold = args.detection_thresh
 
+    depth_root_path = args.image_path.rsplit('.', 1)[0] + "_disp.jpeg"
+
     if args.video:
         for f in files:
             generate_depth_image(args, f)
     else:
         for index, f in enumerate(files):
-            depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, args, None, None, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            if not os.path.exists(depth_root_path):
+                depth_root_path = generate_depth_image(args, f)
+            else:
+                print_update('depth image already generated, moving on...')
+            image, detections = depth_detection_list(f, args, None, None, depth_root_path, depth_threshold, darknet_threshold, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             cv2.imwrite(new_path, image)
 
