@@ -104,6 +104,16 @@ def depth(args):
 
 
 # ----------- utils ------------
+def write_detections_to_file(detections, file_name):
+    output = ""
+    for detection in detections:
+        _, _, bbox = detection
+        output = output + f'{int(bbox[0])},{int(bbox[1])},{int(bbox[0]+bbox[2])},{int(bbox[1]+bbox[3])}\n'
+    filename = file_name.split('/')[-1]
+    filename = file_name.split('.')[0]
+    filename = filename + '.txt'
+    with open(filename, 'w') as outfile:
+        outfile.write(output)
 
 
 def get_path_list_from_dir(path):
