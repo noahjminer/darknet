@@ -13,7 +13,7 @@ def parser():
     parser = argparse.ArgumentParser(description="YOLO Object Detection")
     parser.add_argument("--input", type=str, default=0,
                         help="video source. If empty, uses webcam 0 stream")
-    parser.add_argument("--out_filename", type=str, default="",
+    parser.add_argument("--out_filename", type=str, default="result.avi",
                         help="inference video name. Not saved if empty")
     parser.add_argument("--weights", default="yolov4.weights",
                         help="yolo weights path")
@@ -109,6 +109,8 @@ def video_capture(frame_queue, darknet_image_queue):
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
+            darknet_image_queue.put(None)
+            frame_queue.put(None)
             break
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_resized = cv2.resize(frame_rgb, (darknet_width, darknet_height),
@@ -117,12 +119,14 @@ def video_capture(frame_queue, darknet_image_queue):
         img_for_detect = darknet.make_image(darknet_width, darknet_height, 3)
         darknet.copy_image_from_bytes(img_for_detect, frame_resized.tobytes())
         darknet_image_queue.put(img_for_detect)
-    cap.release()
+    # cap.release()
 
 
 def inference(darknet_image_queue, detections_queue, fps_queue):
     while cap.isOpened():
         darknet_image = darknet_image_queue.get()
+        if darknet_image is None:
+            break
         prev_time = time.time()
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=args.thresh)
         detections_queue.put(detections)
@@ -131,7 +135,7 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
         print("FPS: {}".format(fps))
         darknet.print_detections(detections, args.ext_output)
         darknet.free_image(darknet_image)
-    cap.release()
+    # cap.release()
 
 
 def drawing(frame_queue, detections_queue, fps_queue):
@@ -139,6 +143,8 @@ def drawing(frame_queue, detections_queue, fps_queue):
     video = set_saved_video(cap, args.out_filename, (video_width, video_height))
     while cap.isOpened():
         frame = frame_queue.get()
+        if frame is None:
+            break;
         detections = detections_queue.get()
         fps = fps_queue.get()
         detections_adjusted = []
@@ -147,15 +153,15 @@ def drawing(frame_queue, detections_queue, fps_queue):
                 bbox_adjusted = convert2original(frame, bbox)
                 detections_adjusted.append((str(label), confidence, bbox_adjusted))
             image = darknet.draw_boxes(detections_adjusted, frame, class_colors)
-            if not args.dont_show:
-                cv2.imshow('Inference', image)
+            # if not args.dont_show:
+            #     cv2.imshow('Inference', image)
             if args.out_filename is not None:
                 video.write(image)
             if cv2.waitKey(fps) == 27:
                 break
     cap.release()
     video.release()
-    cv2.destroyAllWindows()
+    # cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
@@ -178,6 +184,16 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(input_path)
     video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
-    Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
-    Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue)).start()
+    capture_thread = Thread(target=video_capture, args=(frame_queue, darknet_image_queue))
+    inference_thread = Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue))
+    drawing_thread = Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue))
+    
+    capture_thread.start()
+    inference_thread.start()
+    drawing_thread.start()
+    
+    capture_thread.join()
+    inference_thread.join()
+    drawing_thread.join()
+    print("Done with video")
+    
