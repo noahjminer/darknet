@@ -280,7 +280,7 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
     print('Detection took ', elapsed_time)
     print('---------------')
     image = darknet.draw_slices(dims, orig_img, class_colors)
-    return darknet.draw_boxes(final_detections, image, class_colors), final_detections
+    return darknet.draw_boxes(final_detections, image, class_colors), final_detections, dims
 
 
 def batch_detection(network, images, class_names, class_colors,

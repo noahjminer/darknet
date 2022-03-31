@@ -30,6 +30,9 @@ def parse_args():
     parser.add_argument('--depth_threshold', type=float,
                         help='depth threshold, with 0 is furthest ditance away',
                         default=15)
+    parser.add_argument('--write_slice_dim_file', type=bool,
+                        help='writes slices to txt file of same name',
+                        default=False)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
@@ -103,12 +106,21 @@ def depth(args):
                 depth_root_path = generate_depth_image(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections = depth_detection_list(f, args, None, None, depth_root_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_threshold, darknet_threshold, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
+            dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)
+            if args.write_slice_dim_file:
+                write_slice_file(depth_dims, dims_path)
 
 
 # ----------- utils ------------
+def write_slice_file(dims, dims_path):
+    with open(dims_path, 'w') as outfile:
+        for dim in dims:
+            outfile.write(str(dim[0]) + ' ' + str(dim[1]) + ' ' + str(dim[2]) + ' ' + str(dim[3]) + '\n')
+
+
 def write_detections_to_file(detections, file_name):
     output = ""
     for detection in detections:
