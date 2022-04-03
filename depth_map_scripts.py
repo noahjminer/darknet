@@ -22,13 +22,12 @@ def find_avg_distance(image, dim):
     return total / count if count != 0 else total / 1
 
 
-def create_depth_mask(image, dim, depth_threshold, proportion_thresh):
-    total = 0
+def create_depth_mask(image, dim, depth_thresh, proportion_thresh):
     count = 0
     for i in range(dim[2], dim[3]):
         for j in range(dim[0], dim[1]):
             dist = int(int((image[i][j] - c1)[0] * 100 / 255))
-            if dist < depth_threshold:
+            if dist < depth_thresh:
                 count += 1
     count = count * 1.0 / ((dim[3] - dim[2]) * (dim[1] - dim[0]))
     print(count, dim)
@@ -37,20 +36,14 @@ def create_depth_mask(image, dim, depth_threshold, proportion_thresh):
     return False
 
 
-def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate, proportion_thresh=.3):
+def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3):
     prev_time = time.time()
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    decompress_rate = 1 / compression_rate
 
     shape = image.shape
     height = int(shape[0])
     width = int(shape[1])
 
-    dsize = (width, height)
-    # image_resized = cv2.resize(image, dsize)
-    # height = image_resized.shape[0]
-    # width = image_resized.shape[1]
-    # Smarter dimensions needed
 
     # 608 is what darknet compresses images to
     num_slice_x = math.floor(width / 608)
@@ -75,7 +68,7 @@ def create_depth_map_with_threshold(no_comp_thresh, image_path, compression_rate
                 right = width - 1
                 left = right - slice_dim_x
             dim = [left, right, top, bottom]
-            if create_depth_mask(image, dim, no_comp_thresh, proportion_thresh):
+            if create_depth_mask(image, dim, depth_thresh, proportion_thresh):
                 # for index, num in enumerate(dim):
                     # dim[index] = int(num * decompress_rate)
                 no_comp_dims.append(dim)

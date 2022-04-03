@@ -1,6 +1,7 @@
 from numpy.ma.core import fabs
 from darknet_images import depth_detection_list, image_detection_list
 from monodepth2.test_simple import create_depth_image
+from depth_map_scripts import create_depth_map_with_threshold
 import darknet
 import argparse
 import random
@@ -88,8 +89,6 @@ def depth_mask(args):
     )
 
 
-
-
 # Lower calibration time - do it in seperate process
 def depth_slice(args):
     files = []
@@ -102,28 +101,37 @@ def depth_slice(args):
 
     # create darknet things
     random.seed(3)  # deterministic bbox colors
-    # network, class_names, class_colors = darknet.load_network(
-    #    args.config_file,
-    #    args.data_file,
-    #    args.weights,
-    #    batch_size=args.batch_size
-    #)
 
-    depth_threshold = args.depth_threshold
-    darknet_threshold = args.detection_thresh
+    depth_thresh = args.depth_threshold
+    detection_thresh = args.detection_thresh
+    proportion_thresh = args.proportion_thresh
 
     depth_root_path = args.image_path.rsplit('.', 1)[0] + "_disp.jpeg"
 
     if args.video:
         for f in files:
-            generate_depth_image(args, f)
+            if not os.path.exists(depth_root_path):
+                depth_root_path = generate_depth_image(args, f)
+            else:
+                print_update('depth image already generated, moving on...')
+            # generate dims
+            dims = []
+            if os.path.exists(f.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
+                with open(f.split('.', 1)[0] + '_dims.txt', 'r') as infile:
+                    content = infile.readlines()
+                    for line in content:
+                        nums = [int(n) for n in line.split(' ')]
+                        dims.append(nums)
+            else:
+                dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh)
+            # pass into darknet_video func
     else:
         for index, f in enumerate(files):
             if not os.path.exists(depth_root_path):
                 depth_root_path = generate_depth_image(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh, detection_thresh, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)

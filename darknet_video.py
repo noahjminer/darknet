@@ -6,6 +6,7 @@ import time
 import darknet
 import argparse
 from threading import Thread, enumerate
+from darknet_images import depth_detection_on_frame
 from queue import Queue
 
 
@@ -105,7 +106,7 @@ def convert4cropping(image, bbox):
     return bbox_cropping
 
 
-def video_capture(frame_queue, darknet_image_queue):
+def video_capture(frame_queue, image_queue, darknet_width, darknet_height):
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -113,34 +114,29 @@ def video_capture(frame_queue, darknet_image_queue):
             frame_queue.put(None)
             break
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_resized = cv2.resize(frame_rgb, (darknet_width, darknet_height),
-                                   interpolation=cv2.INTER_LINEAR)
         frame_queue.put(frame)
-        img_for_detect = darknet.make_image(darknet_width, darknet_height, 3)
-        darknet.copy_image_from_bytes(img_for_detect, frame_resized.tobytes())
-        darknet_image_queue.put(img_for_detect)
+        image_queue.put(frame_rgb)
     # cap.release()
 
 
-def inference(darknet_image_queue, detections_queue, fps_queue):
+def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
     while cap.isOpened():
-        darknet_image = darknet_image_queue.get()
-        if darknet_image is None:
+        frame = image_queue.get()
+        if frame is None:
             break
         prev_time = time.time()
-        detections = darknet.detect_image(network, class_names, darknet_image, thresh=args.thresh)
+        detections = depth_detection_on_frame(frame, dims, network, class_names, class_colors, detection_thresh)
         detections_queue.put(detections)
         fps = int(1/(time.time() - prev_time))
         fps_queue.put(fps)
         print("FPS: {}".format(fps))
         darknet.print_detections(detections, args.ext_output)
-        darknet.free_image(darknet_image)
     # cap.release()
 
 
-def drawing(frame_queue, detections_queue, fps_queue):
+def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height, output_filename='result.avi'):
     random.seed(3)  # deterministic bbox colors
-    video = set_saved_video(cap, args.out_filename, (video_width, video_height))
+    video = set_saved_video(cap, output_filename, (video_width, video_height))
     while cap.isOpened():
         frame = frame_queue.get()
         if frame is None:
@@ -155,13 +151,47 @@ def drawing(frame_queue, detections_queue, fps_queue):
             image = darknet.draw_boxes(detections_adjusted, frame, class_colors)
             # if not args.dont_show:
             #     cv2.imshow('Inference', image)
-            if args.out_filename is not None:
+            if output_filename is not None:
                 video.write(image)
             if cv2.waitKey(fps) == 27:
                 break
     cap.release()
     video.release()
     # cv2.destroyAllWindows()
+
+
+def detect_video(video_path, dims, detection_thresh, output_filename='result.avi'):
+    frame_queue = Queue()
+    image_queue = Queue(maxsize=1)
+    detections_queue = Queue(maxsize=1)
+    fps_queue = Queue(maxsize=1)
+
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=len(dims)
+    )
+    darknet_width = darknet.network_width(network)
+    darknet_height = darknet.network_height(network)
+
+    # figure out webcam as well
+    input_path = str2int(video_path)
+    cap = cv2.VideoCapture(input_path)
+    video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    capture_thread = Thread(target=video_capture, args=(frame_queue, image_queue, darknet_width, darknet_height))
+    inference_thread = Thread(target=inference, args=(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
+    drawing_thread = Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue, video_height, video_width, output_filename))
+
+    capture_thread.start()
+    inference_thread.start()
+    drawing_thread.start()
+
+    capture_thread.join()
+    inference_thread.join()
+    drawing_thread.join()
+    print("Done with video")
 
 
 if __name__ == '__main__':
