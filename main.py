@@ -1,6 +1,7 @@
 from numpy.ma.core import fabs
 from darknet_images import depth_detection_list, image_detection_list
-from monodepth2.test_simple import create_depth_image
+from darknet_video import detect_video
+from monodepth2.test_simple import create_depth_image_from_file, create_depth_image_from_frame
 from depth_map_scripts import create_depth_map_with_threshold
 import darknet
 import argparse
@@ -68,10 +69,23 @@ def baseline(args):
     print('Baseline')
 
 
-def generate_depth_image(args, f):
+def generate_depth_image_from_file(args, f):
     prev = time.time()
     print_update(f'Generating depth image for {f}')
-    output = create_depth_image(args, f)
+    output = create_depth_image_from_file(args, f)
+    diff = time.time() - prev
+    print_update(f'Generation complete in {diff}, output at {output}')
+    return output
+
+
+def generate_depth_image_from_frame(args, f):
+    prev = time.time()
+    print_update(f'Generating depth image for {f}')
+    cap = cv2.VideoCapture(f)
+    frame = cap.read()
+    frame_rgb = cv2.COLOR_BGR2RGB(frame)
+    cap.release()
+    output = create_depth_image_from_frame(args, frame_rgb)
     diff = time.time() - prev
     print_update(f'Generation complete in {diff}, output at {output}')
     return output
@@ -111,7 +125,7 @@ def depth_slice(args):
     if args.video:
         for f in files:
             if not os.path.exists(depth_root_path):
-                depth_root_path = generate_depth_image(args, f)
+                depth_root_path = generate_depth_image_from_frame(args, f)
             else:
                 print_update('depth image already generated, moving on...')
             # generate dims
@@ -125,10 +139,12 @@ def depth_slice(args):
             else:
                 dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh)
             # pass into darknet_video func
+            detect_video(f, dims, detection_thresh)
+
     else:
         for index, f in enumerate(files):
             if not os.path.exists(depth_root_path):
-                depth_root_path = generate_depth_image(args, f)
+                depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')
             image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh, detection_thresh, args.proportion_thresh)

@@ -107,8 +107,8 @@ def convert4cropping(image, bbox):
 
 
 def video_capture(frame_queue, image_queue, darknet_width, darknet_height):
-    while cap.isOpened():
-        ret, frame = cap.read()
+    while global_cap.isOpened():
+        ret, frame = global_cap.read()
         if not ret:
             darknet_image_queue.put(None)
             frame_queue.put(None)
@@ -120,7 +120,7 @@ def video_capture(frame_queue, image_queue, darknet_width, darknet_height):
 
 
 def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
-    while cap.isOpened():
+    while global_cap.isOpened():
         frame = image_queue.get()
         if frame is None:
             break
@@ -136,8 +136,9 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
 
 def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height, output_filename='result.avi'):
     random.seed(3)  # deterministic bbox colors
-    video = set_saved_video(cap, output_filename, (video_width, video_height))
-    while cap.isOpened():
+
+    video = set_saved_video(global_cap, output_filename, (video_width, video_height))
+    while global_cap.isOpened():
         frame = frame_queue.get()
         if frame is None:
             break;
@@ -155,12 +156,17 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
                 video.write(image)
             if cv2.waitKey(fps) == 27:
                 break
-    cap.release()
+    global_cap.release()
     video.release()
     # cv2.destroyAllWindows()
 
 
+global_cap = None
+
+
 def detect_video(video_path, dims, detection_thresh, output_filename='result.avi'):
+    global global_cap
+
     frame_queue = Queue()
     image_queue = Queue(maxsize=1)
     detections_queue = Queue(maxsize=1)
@@ -177,7 +183,7 @@ def detect_video(video_path, dims, detection_thresh, output_filename='result.avi
 
     # figure out webcam as well
     input_path = str2int(video_path)
-    cap = cv2.VideoCapture(input_path)
+    global_cap = cv2.VideoCapture(input_path)
     video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     capture_thread = Thread(target=video_capture, args=(frame_queue, image_queue, darknet_width, darknet_height))
@@ -226,4 +232,3 @@ if __name__ == '__main__':
     inference_thread.join()
     drawing_thread.join()
     print("Done with video")
-    
