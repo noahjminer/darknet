@@ -197,7 +197,15 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
 def depth_detection_list(image_path, args, class_names, class_colors, depth_path, depth_thresh, img_thresh,
                          proportion_thresh):
     compress_rate = .5
-    dims = create_depth_map_with_threshold(depth_thresh, depth_path, compress_rate, proportion_thresh)
+    dims = []
+    if os.path.exists(image_path.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
+        with open(image_path.split('.', 1)[0] + '_dims.txt', 'r') as infile:
+            content = infile.readlines()
+            for line in content:
+                nums = [int(n) for n in line.split(' ')]
+                dims.append(nums)
+    else:
+        dims = create_depth_map_with_threshold(depth_thresh, depth_path, compress_rate, proportion_thresh)
 
     width = []
     height = []
@@ -280,7 +288,7 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
     print('Detection took ', elapsed_time)
     print('---------------')
     image = darknet.draw_slices(dims, orig_img, class_colors)
-    return darknet.draw_boxes(final_detections, image, class_colors), final_detections
+    return darknet.draw_boxes(final_detections, image, class_colors), final_detections, dims
 
 
 def batch_detection(network, images, class_names, class_colors,

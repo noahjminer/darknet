@@ -30,6 +30,9 @@ def parse_args():
     parser.add_argument('--depth_threshold', type=float,
                         help='depth threshold, with 0 is furthest ditance away',
                         default=15)
+    parser.add_argument('--write_slice_dim_file', type=bool,
+                        help='writes slices to txt file of same name',
+                        default=False)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
@@ -53,6 +56,8 @@ def parse_args():
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
+    parser.add_argument("--refresh_dims", default=False, type=bool
+                        )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
     return parser.parse_args()
@@ -71,7 +76,22 @@ def generate_depth_image(args, f):
     return output
 
 
-def depth(args):
+def depth_mask(args):
+    assert args.image_path is not None
+
+    random.seed(3)
+    network, class_names, class_colors = darknet.load_network(
+        args.config_file,
+        args.data_file,
+        args.weights,
+        batch_size=args.batch_size
+    )
+
+
+
+
+# Lower calibration time - do it in seperate process
+def depth_slice(args):
     files = []
 
     assert args.image_path is not None
@@ -92,18 +112,32 @@ def depth(args):
     depth_threshold = args.depth_threshold
     darknet_threshold = args.detection_thresh
 
+    depth_root_path = args.image_path.rsplit('.', 1)[0] + "_disp.jpeg"
+
     if args.video:
         for f in files:
             generate_depth_image(args, f)
     else:
         for index, f in enumerate(files):
-            depth_path = generate_depth_image(args, f)
-            image, detections = depth_detection_list(f, args, None, None, depth_path, depth_threshold, darknet_threshold, args.proportion_thresh)
+            if not os.path.exists(depth_root_path):
+                depth_root_path = generate_depth_image(args, f)
+            else:
+                print_update('depth image already generated, moving on...')
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_threshold, darknet_threshold, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
+            dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)
+            if args.write_slice_dim_file:
+                write_slice_file(depth_dims, dims_path)
 
 
 # ----------- utils ------------
+def write_slice_file(dims, dims_path):
+    with open(dims_path, 'w') as outfile:
+        for dim in dims:
+            outfile.write(str(dim[0]) + ' ' + str(dim[1]) + ' ' + str(dim[2]) + ' ' + str(dim[3]) + '\n')
+
+
 def write_detections_to_file(detections, file_name):
     output = ""
     for detection in detections:
@@ -134,7 +168,9 @@ if __name__ == '__main__':
     if args.method == 'baseline':
         baseline(args)
     elif args.method == 'depth':
-        depth(args)
+        depth_slice(args)
+    elif args.method == 'depth_mask':
+        depth_mask(args)
 
 
 
