@@ -36,14 +36,13 @@ def create_depth_mask(image, dim, depth_thresh, proportion_thresh):
     return False
 
 
-def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3):
+def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3, expand_ratio=.05):
     prev_time = time.time()
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
 
     shape = image.shape
     height = int(shape[0])
     width = int(shape[1])
-
 
     # 608 is what darknet compresses images to
     num_slice_x = math.floor(width / 608)
@@ -54,6 +53,12 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
 
     avgs = []
     no_comp_dims = []
+    top_overlap = 0
+    bottom_overlap = 0
+    left_overlap = 0
+    right_overlap = 0
+    expand_amount = expand_ratio * 608
+    half_expand_amount = math.floor(expand_amount * .5)
     for x in range(1, num_slice_x + 1):
         col_avg = []
         for y in range(1, num_slice_y + 1):
@@ -70,8 +75,29 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
             dim = [left, right, top, bottom]
             if create_depth_mask(image, dim, depth_thresh, proportion_thresh):
                 # for index, num in enumerate(dim):
-                    # dim[index] = int(num * decompress_rate)
+                # dim[index] = int(num * decompress_rate)
                 no_comp_dims.append(dim)
+
+    print(no_comp_dims)
+    expand_amount = int(2 * half_expand_amount)
+    for index, dim in enumerate(no_comp_dims):
+        if dim[0] == 0:
+            dim[1] += expand_amount
+        elif dim[1] == width - 1:
+            dim[0] -= expand_amount
+        else:
+            dim[0] -= half_expand_amount
+            dim[1] += half_expand_amount
+
+        if dim[2] == 0:
+            dim[3] += expand_amount
+        elif dim[3] == height - 1:
+            dim[2] -= expand_amount
+        else:
+            dim[2] -= half_expand_amount
+            dim[3] += half_expand_amount
+    print(no_comp_dims)
+
     print('---------------')
     elapsed_time = time.time() - prev_time
     print('Depth map took ', elapsed_time)

@@ -60,6 +60,8 @@ def parse_args():
                         help="number of images to be processed at the same time")
     parser.add_argument("--refresh_dims", default=False, type=bool
                         )
+    parser.add_argument("--refresh_depth", default=False, type=bool
+                        )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
     return parser.parse_args()
@@ -124,13 +126,13 @@ def depth_slice(args):
 
     if args.video:
         for f in files:
-            if not os.path.exists(depth_root_path):
+            if not os.path.exists(depth_root_path) or args.refresh_depth:
                 depth_root_path = generate_depth_image_from_frame(args, f)
             else:
                 print_update('depth image already generated, moving on...')
             # generate dims
             dims = []
-            if os.path.exists(f.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
+            if os.path.exists(f.split('.', 1)[0] + '_dims.txt') and not args.refresh_depth:
                 with open(f.split('.', 1)[0] + '_dims.txt', 'r') as infile:
                     content = infile.readlines()
                     for line in content:
@@ -143,11 +145,9 @@ def depth_slice(args):
             if args.write_slice_dim_file:
                 write_slice_file(dims, dims_path)
             detect_video(args, f, dims, detection_thresh)
-
-
     else:
         for index, f in enumerate(files):
-            if not os.path.exists(depth_root_path):
+            if not os.path.exists(depth_root_path) or args.refresh_depth:
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')

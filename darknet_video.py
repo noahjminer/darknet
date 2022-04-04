@@ -55,7 +55,7 @@ def check_arguments_errors(args):
 
 
 def set_saved_video(input_video, output_video, size):
-    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
     fps = int(input_video.get(cv2.CAP_PROP_FPS))
     video = cv2.VideoWriter(output_video, fourcc, fps, size)
     return video
@@ -127,7 +127,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
         prev_time = time.time()
         detections = depth_detection_on_frame(frame, dims, network, class_names, class_colors, detection_thresh)
         detections_queue.put(detections)
-        fps = int(1 / (time.time() - prev_time))
+        fps = float(1 / (time.time() - prev_time))
         fps_queue.put(fps)
         print("FPS: {}".format(fps))
         darknet.print_detections(detections, True)
@@ -155,7 +155,7 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
             #     cv2.imshow('Inference', image)
             if output_filename is not None:
                 video.write(image)
-            if cv2.waitKey(fps) == 27:
+            if cv2.waitKey(int(fps)) == 27:
                 break
     global_cap.release()
     video.release()
@@ -193,7 +193,7 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     inference_thread = Thread(target=inference, args=(
     image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
     drawing_thread = Thread(target=drawing, args=(
-    frame_queue, detections_queue, fps_queue, video_height, video_width, class_colors, output_filename))
+    frame_queue, detections_queue, fps_queue, video_width, video_height, class_colors, output_filename))
 
     capture_thread.start()
     inference_thread.start()
