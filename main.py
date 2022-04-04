@@ -82,10 +82,10 @@ def generate_depth_image_from_frame(args, f):
     prev = time.time()
     print_update(f'Generating depth image for {f}')
     cap = cv2.VideoCapture(f)
-    frame = cap.read()
-    frame_rgb = cv2.COLOR_BGR2RGB(frame)
+    ret, frame = cap.read()
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     cap.release()
-    output = create_depth_image_from_frame(args, frame_rgb)
+    output = create_depth_image_from_frame(args, frame_rgb, f)
     diff = time.time() - prev
     print_update(f'Generation complete in {diff}, output at {output}')
     return output
@@ -139,7 +139,11 @@ def depth_slice(args):
             else:
                 dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh)
             # pass into darknet_video func
-            detect_video(f, dims, detection_thresh)
+            dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
+            if args.write_slice_dim_file:
+                write_slice_file(dims, dims_path)
+            detect_video(args, f, dims, detection_thresh)
+
 
     else:
         for index, f in enumerate(files):
@@ -147,7 +151,8 @@ def depth_slice(args):
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh, detection_thresh, args.proportion_thresh)
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh,
+                                                                 detection_thresh, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)
