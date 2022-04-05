@@ -208,7 +208,9 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
         images.append(new_slice)
 
     # batch_time = time.time()
-    bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+    bboxes = []
+    if len(dims) > 0:
+      bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
 
     # can edit once sizes are uniform, or collect array of sizes.
     for i, img_boxes in enumerate(bboxes):
@@ -305,7 +307,9 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
 
     decompress_slice_x = slice_shape[1] / 608
     decompress_slice_y = slice_shape[0] / 608
-    bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+    bboxes = []
+    if len(dims) > 0:
+      bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
 
     # can edit once sizes are uniform, or collect array of sizes.
     for i, img_boxes in enumerate(bboxes):
