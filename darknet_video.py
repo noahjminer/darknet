@@ -120,12 +120,14 @@ def video_capture(frame_queue, image_queue):
 
 
 def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
+    if len(dims):
+        slice_side_length = dims[0][1] - dims[0][0]
     while global_cap.isOpened():
         frame = image_queue.get()
         if frame is None:
             break
         prev_time = time.time()
-        detections = depth_detection_on_frame(frame, dims, network, class_names, class_colors, detection_thresh)
+        detections = depth_detection_on_frame(frame, dims, network, class_names, class_colors, slice_side_length, detection_thresh)
         detections_queue.put(detections)
         fps = float(1 / (time.time() - prev_time))
         fps_queue.put(fps)
@@ -145,7 +147,7 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
             break;
         detections = detections_queue.get()
         fps = fps_queue.get()
-        detections_adjusted = []
+        # detections_adjusted = []
         if frame is not None:
             # for label, confidence, bbox in detections:
             #    bbox_adjusted = convert2original(frame, bbox)

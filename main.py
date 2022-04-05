@@ -58,6 +58,8 @@ def parse_args():
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
+    parser.add_argument("--slice_side_length", default=608, type=int,
+                        help="length of slice side in depth map")
     parser.add_argument("--refresh_dims", default=False, type=bool
                         )
     parser.add_argument("--refresh_depth", default=False, type=bool
@@ -138,8 +140,9 @@ def depth_slice(args):
                     for line in content:
                         nums = [int(n) for n in line.split(' ')]
                         dims.append(nums)
+                        args.slice_side_length = nums[1] - nums[0]
             else:
-                dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh)
+                dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh, args.slice_side_length)
             # pass into darknet_video func
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             if args.write_slice_dim_file:
@@ -151,7 +154,7 @@ def depth_slice(args):
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh,
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh, args.slice_side_length,
                                                                  detection_thresh, args.proportion_thresh)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
