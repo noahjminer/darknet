@@ -189,7 +189,7 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
             continue
         final_detections.append(item)
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, 0.8)
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.7)
 
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
@@ -250,7 +250,7 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, de
     # for outputting depth map variables
     # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, .8)
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.7)
     # print('---------------')
     # # elapsed_time = time.time() - prev_time
     # print('Detection took ', elapsed_time)
@@ -339,7 +339,7 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
     # for outputting depth map variables
     # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
 
-    final_detections = darknet.non_max_suppression_fast(final_detections, .8)
+    final_detections = darknet.non_max_suppression_fast(final_detections, 0.7)
     print('---------------')
     elapsed_time = time.time() - prev_time
     print('Detection took ', elapsed_time)
