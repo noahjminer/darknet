@@ -8,6 +8,7 @@ import argparse
 from threading import Thread, enumerate
 from darknet_images import depth_detection_on_frame
 from queue import Queue
+import signal
 
 
 def parser():
@@ -140,7 +141,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
 def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height, class_colors,
             output_filename='result.avi'):
     random.seed(3)  # deterministic bbox colors
-
+    global video
     video = set_saved_video(global_cap, output_filename, (video_width, video_height))
     while global_cap.isOpened():
         frame = frame_queue.get()
@@ -168,6 +169,7 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
 global_cap = None
 darknet_width = 0
 darknet_height = 0
+video = None
 
 
 def detect_video(args, video_path, dims, detection_thresh, output_filename='result.avi'):
@@ -207,6 +209,17 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     drawing_thread.join()
     print("Done with video")
 
+def handler(signum, frame):
+    global global_cap, video
+    print("exiting")
+    if global_cap:
+        global_cap.release()
+    if video:
+        video.release()
+    time.sleep(1)
+    print("exiting sucessfully")
+
+signal.signal(signal.SIGINT, handler)
 
 if __name__ == '__main__':
     frame_queue = Queue()
