@@ -29,14 +29,14 @@ def create_depth_mask(image, dim, depth_thresh, proportion_thresh):
             dist = int(int((image[i][j] - c1)[0] * 100 / 255))
             if dist < depth_thresh:
                 count += 1
-    count = count * 1.0 / ((dim[3] - dim[2]) * (dim[1] - dim[0]))
+    count = count / ((dim[3] - dim[2]) * (dim[1] - dim[0]))
     print(count, dim)
     if count > proportion_thresh:
         return True
     return False
 
 
-def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3, expand_ratio=.05):
+def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3, slice_side_length=608, expand_ratio=.05):
     prev_time = time.time()
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
 
@@ -45,19 +45,15 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
     width = int(shape[1])
 
     # 608 is what darknet compresses images to
-    num_slice_x = math.floor(width / 608)
-    num_slice_y = math.floor(height / 608)
+    num_slice_x = math.floor(width / slice_side_length)
+    num_slice_y = math.floor(height / slice_side_length)
 
     slice_dim_x = math.ceil(width / num_slice_x)
     slice_dim_y = math.ceil(height / num_slice_y)
 
     avgs = []
     no_comp_dims = []
-    top_overlap = 0
-    bottom_overlap = 0
-    left_overlap = 0
-    right_overlap = 0
-    expand_amount = expand_ratio * 608
+    expand_amount = expand_ratio * slice_side_length
     half_expand_amount = math.floor(expand_amount * .5)
     for x in range(1, num_slice_x + 1):
         col_avg = []
@@ -66,10 +62,10 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
             right = x * slice_dim_x
             top = (y - 1) * slice_dim_y
             bottom = y * slice_dim_y
-            if bottom > height:
+            if bottom >= height:
                 bottom = height - 1
                 top = bottom - slice_dim_y
-            if right > width:
+            if right >= width:
                 right = width - 1
                 left = right - slice_dim_x
             dim = [left, right, top, bottom]
@@ -78,7 +74,6 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
                 # dim[index] = int(num * decompress_rate)
                 no_comp_dims.append(dim)
 
-    print(no_comp_dims)
     expand_amount = int(2 * half_expand_amount)
     for index, dim in enumerate(no_comp_dims):
         if dim[0] == 0:

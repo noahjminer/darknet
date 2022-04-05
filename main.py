@@ -34,7 +34,7 @@ def parse_args():
                         default=15)
     parser.add_argument('--write_slice_dim_file', type=bool,
                         help='writes slices to txt file of same name',
-                        default=False)
+                        default=True)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
@@ -58,9 +58,11 @@ def parse_args():
                         help="yolo weights path")
     parser.add_argument("--batch_size", default=1, type=int,
                         help="number of images to be processed at the same time")
-    parser.add_argument("--refresh_dims", default=False, type=bool
+    parser.add_argument("--slice_side_length", default=608, type=int,
+                        help="length of slice side in depth map")
+    parser.add_argument("--refresh_dims", default=True, type=bool
                         )
-    parser.add_argument("--refresh_depth", default=False, type=bool
+    parser.add_argument("--refresh_depth", default=True, type=bool
                         )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
@@ -138,8 +140,9 @@ def depth_slice(args):
                     for line in content:
                         nums = [int(n) for n in line.split(' ')]
                         dims.append(nums)
+                        args.slice_side_length = nums[1] - nums[0]
             else:
-                dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh)
+                dims = create_depth_map_with_threshold(depth_root_path, depth_thresh, proportion_thresh, args.slice_side_length)
             # pass into darknet_video func
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             if args.write_slice_dim_file:
@@ -152,7 +155,7 @@ def depth_slice(args):
             else:
                 print_update('depth image already generated, moving on...')
             image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh,
-                                                                 detection_thresh, args.proportion_thresh)
+                                                                 detection_thresh, args.proportion_thresh, args.slice_side_length)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)
