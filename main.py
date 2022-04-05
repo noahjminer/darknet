@@ -34,7 +34,7 @@ def parse_args():
                         default=15)
     parser.add_argument('--write_slice_dim_file', type=bool,
                         help='writes slices to txt file of same name',
-                        default=False)
+                        default=True)
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
@@ -60,9 +60,9 @@ def parse_args():
                         help="number of images to be processed at the same time")
     parser.add_argument("--slice_side_length", default=608, type=int,
                         help="length of slice side in depth map")
-    parser.add_argument("--refresh_dims", default=False, type=bool
+    parser.add_argument("--refresh_dims", default=True, type=bool
                         )
-    parser.add_argument("--refresh_depth", default=False, type=bool
+    parser.add_argument("--refresh_depth", default=True, type=bool
                         )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
