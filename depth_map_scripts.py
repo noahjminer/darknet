@@ -29,14 +29,14 @@ def create_depth_mask(image, dim, depth_thresh, proportion_thresh):
             dist = int(int((image[i][j] - c1)[0] * 100 / 255))
             if dist < depth_thresh:
                 count += 1
-    count = count * 1.0 / ((dim[3] - dim[2]) * (dim[1] - dim[0]))
+    count = count / ((dim[3] - dim[2]) * (dim[1] - dim[0]))
     print(count, dim)
     if count > proportion_thresh:
         return True
     return False
 
 
-def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3, expand_ratio=.05, slice_side_length=608):
+def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=.3, slice_side_length=608, expand_ratio=.05):
     prev_time = time.time()
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
 

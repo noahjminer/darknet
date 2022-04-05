@@ -263,7 +263,7 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
 
 
 def depth_detection_list(image_path, args, class_names, class_colors, depth_path, depth_thresh, img_thresh,
-                         proportion_thresh):
+                         proportion_thresh, slice_side_length):
     dims = []
     if os.path.exists(image_path.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
         with open(image_path.split('.', 1)[0] + '_dims.txt', 'r') as infile:
@@ -271,9 +271,9 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
             for line in content:
                 nums = [int(n) for n in line.split(' ')]
                 dims.append(nums)
-            args.slice_side_length = nums[1] - nums[0]
+            slice_side_length = nums[1] - nums[0]
     else:
-        dims = create_depth_map_with_threshold(depth_path, depth_thresh, proportion_thresh, args.slice_side_length)
+        dims = create_depth_map_with_threshold(depth_path, depth_thresh, proportion_thresh, slice_side_length)
 
     random.seed(3)  # deterministic bbox colors
     network, class_names, class_colors = darknet.load_network(
@@ -298,7 +298,7 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
         new_slice = image_rgb[dim[2]:dim[3], dim[0]:dim[1]]
         slice_shape = new_slice.shape
 
-        if args.slice_side_length != 608:
+        if slice_side_length != 608:
             new_slice = cv2.resize(new_slice, (width, height),
                                interpolation=cv2.INTER_LINEAR)
         images.append(new_slice)

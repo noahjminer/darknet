@@ -154,8 +154,8 @@ def depth_slice(args):
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh, args.slice_side_length,
-                                                                 detection_thresh, args.proportion_thresh)
+            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh,
+                                                                 detection_thresh, args.proportion_thresh, args.slice_side_length)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
             cv2.imwrite(new_path, image)
