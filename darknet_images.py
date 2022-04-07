@@ -305,24 +305,24 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
                                interpolation=cv2.INTER_LINEAR)
         images.append(new_slice)
 
-    decompress_slice_x = slice_shape[1] / 608
-    decompress_slice_y = slice_shape[0] / 608
     bboxes = []
-    if len(dims) > 0:
-      bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+    if len(dims):
+        decompress_slice_x = slice_shape[1] / 608
+        decompress_slice_y = slice_shape[0] / 608
+        bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
 
-    # can edit once sizes are uniform, or collect array of sizes.
-    for i, img_boxes in enumerate(bboxes):
-        for j, box in enumerate(img_boxes):
-            bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
-            x, y, w, h = bbox
-            x = x * decompress_slice_x
-            y = y * decompress_slice_y
-            x = dims[i][0] + x
-            y = dims[i][2] + y
-            w = w * decompress_slice_x
-            h = h * decompress_slice_y
-            bboxes[i][j] = (box[0], box[1], (x, y, w, h))
+        # can edit once sizes are uniform, or collect array of sizes.
+        for i, img_boxes in enumerate(bboxes):
+            for j, box in enumerate(img_boxes):
+                bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
+                x, y, w, h = bbox
+                x = x * decompress_slice_x
+                y = y * decompress_slice_y
+                x = dims[i][0] + x
+                y = dims[i][2] + y
+                w = w * decompress_slice_x
+                h = h * decompress_slice_y
+                bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
     print('slices done in ', time.time() - batch_time)
 

@@ -149,6 +149,9 @@ def decode_detection(detections):
 # https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
 # Malisiewicz et al.
 def non_max_suppression_fast(detections, overlap_thresh):
+    if not len(detections):
+        return []
+
     boxes = []
     for detection in detections:
         _, _, (x, y, w, h) = detection
