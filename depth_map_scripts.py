@@ -68,6 +68,10 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
             if right >= width:
                 right = width - 1
                 left = right - slice_dim_x
+            if top < 0:
+                top = 0
+            if left < 0:
+                left = 0
             dim = [left, right, top, bottom]
             if create_depth_mask(image, dim, depth_thresh, proportion_thresh):
                 # for index, num in enumerate(dim):
@@ -75,22 +79,31 @@ def create_depth_map_with_threshold(image_path, depth_thresh, proportion_thresh=
                 no_comp_dims.append(dim)
 
     expand_amount = int(2 * half_expand_amount)
-    for index, dim in enumerate(no_comp_dims):
-        if dim[0] == 0:
-            dim[1] += expand_amount
-        elif dim[1] == width - 1:
-            dim[0] -= expand_amount
-        else:
-            dim[0] -= half_expand_amount
-            dim[1] += half_expand_amount
+    if len(no_comp_dims) > 1:
+        for index, dim in enumerate(no_comp_dims):
+            if dim[0] == 0:
+                dim[1] += expand_amount
+            elif dim[1] >= width - 1:
+                dim[0] -= expand_amount
+            else:
+                dim[0] -= half_expand_amount
+                dim[1] += half_expand_amount
 
-        if dim[2] == 0:
-            dim[3] += expand_amount
-        elif dim[3] == height - 1:
-            dim[2] -= expand_amount
-        else:
-            dim[2] -= half_expand_amount
-            dim[3] += half_expand_amount
+            if dim[2] == 0:
+                dim[3] += expand_amount
+            elif dim[3] >= height - 1:
+                dim[2] -= expand_amount
+            else:
+                dim[2] -= half_expand_amount
+                dim[3] += half_expand_amount
+            if dim[0] < 0:
+                dim[0] = 0
+            if dim[1] >= width:
+                dim[1] = width-1
+            if dim[2] < 0:
+                dim[2] = 0
+            if dim[3] >= height:
+                dim[3] = height-1
     print(no_comp_dims)
 
     print('---------------')

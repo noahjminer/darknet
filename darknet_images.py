@@ -87,10 +87,10 @@ def prepare_batch(images, network, channels=3):
 
     darknet_images = []
     for image in images:
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_resized = cv2.resize(image_rgb, (width, height),
-                                   interpolation=cv2.INTER_LINEAR)
-        custom_image = image_resized.transpose(2, 0, 1)
+        # image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # image_resized = cv2.resize(image_rgb, (width, height),
+        #                            interpolation=cv2.INTER_LINEAR)
+        custom_image = image.transpose(2, 0, 1)
         darknet_images.append(custom_image)
 
     batch_array = np.concatenate(darknet_images, axis=0)
