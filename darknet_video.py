@@ -9,6 +9,7 @@ from threading import Thread, enumerate
 from darknet_images import depth_detection_on_frame
 from queue import Queue
 import signal
+import math
 
 
 def parser():
@@ -120,17 +121,98 @@ def video_capture(frame_queue, image_queue):
     # cap.release()
 
 
+def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result, thread_id):  #diff_thresh is the different threshhold, value from 0 to 1, 0 is no change
+    #function return true if the proportion of changes in slice is greater than diff_thresh 
+    start_thread = time.time()
+    x1, x2, y1, y2 = dim
+    count = 0
+    compress_level = 5 # distance between checking pixels
+    print (x1, x2, y1, y2)
+    for x in range(x1, x2, compress_level):
+        for y in range(y1, y2, compress_level):
+            r1, g1, b1 = pre_frame[y,x]
+            r2, g2, b2 = cur_frame[y,x]
+
+            color_diff = math.sqrt ((int(r1) - int(r2))**2 +
+                                    (int(g1) - int(g2))**2 +
+                                    (int(b1) - int(b2))**2 )
+            
+            if color_diff > 5: # change this to a RBG compare function
+                count += compress_level
+                # if pixels are different, assuming that whole section is different
+
+    end_thread = time.time()
+    print(count/((x2-x1)*(y2-y1)), '----------' , diff_thresh, " in time ", end_thread-start_thread)
+    
+    if count/((x2-x1)*(y2-y1)) > diff_thresh:
+        thread_result[thread_id] = True
+    else:
+        thread_result[thread_id] = False
+    return
+
+
+def check_object_in_prev_slice(bbox, dim):
+    x, y, _, _, = bbox
+    x1, x2, y1, y2 = dim
+    if (x1 <= x) and (x <= x2) and (y1 <= y) and (y <= y2):
+        return True
+    return False
+
+
+def run_compare_thread(dims, prev_frame, frame, prev_detection):
+    thread_tracker = []
+    thread_result = [False] * len(dims)
+    start_time = time.time()
+    for i in range(len(dims)):
+        thread_tracker.append(Thread(target=compare_slices, args=(prev_frame, frame, dims[i], 0.05, thread_result, i)))
+        thread_tracker[i].start()
+    for i in range(len(dims)):
+        thread_tracker[i].join()
+    print("end in -----------------", time.time() - start_time)
+    remain_detection = []
+    new_dims = []
+    for i in range(len(dims)):
+        if thread_result[i] is False:
+            dim = dims[i]
+            for detection in prev_detection:
+                # detection is label, confidence, bbox
+                # x, y, w, h = bbox
+                if check_object_in_prev_slice(detection[2], dim):
+                   remain_detection.append(detection)
+        else:
+            new_dims.append(dims[i])
+    return remain_detection, new_dims
+
+
 def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
+    global prev_frame, prev_detection, global_cap
+
     while global_cap.isOpened():
         frame = image_queue.get()
         if frame is None:
             break
         prev_time = time.time()
+        
+        print(len(dims), "before threading")
+
+        remain_detection, cur_dims = run_compare_thread(dims, prev_frame, frame, prev_detection)
+
+        print(len(cur_dims), "after threading")
+        
+        prev_frame = frame
+
         slice_side_length = 0
         if len(dims):
           slice_side_length = dims[0][1] - dims[0][0]
-        detections = depth_detection_on_frame(frame, dims, network, class_names, class_colors, slice_side_length, detection_thresh)
+
+        detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length, detection_thresh)
+        for detection in remain_detection:
+            detections.append(detection)
+       
         detections_queue.put(detections)
+        
+        prev_detection = detections
+
         fps = float(1 / (time.time() - prev_time))
         fps_queue.put(fps)
         print("FPS: {}".format(fps))
@@ -146,7 +228,7 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
     while global_cap.isOpened():
         frame = frame_queue.get()
         if frame is None:
-            break;
+            break
         detections = detections_queue.get()
         fps = fps_queue.get()
         # detections_adjusted = []
@@ -171,9 +253,14 @@ darknet_width = 0
 darknet_height = 0
 video = None
 
+prev_detection = []
+prev_frame = None
+
+frame_queue = None
+image_queue = None
 
 def detect_video(args, video_path, dims, detection_thresh, output_filename='result.avi'):
-    global global_cap, darknet_width, darknet_height
+    global global_cap, darknet_width, darknet_height, frame_queue, image_queue
 
     frame_queue = Queue()
     image_queue = Queue(maxsize=1)
@@ -210,14 +297,18 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     print("Done with video")
 
 def handler(signum, frame):
-    global global_cap, video
-    print("exiting")
+    global global_cap, video, frame_queue, image_queue
+    print("exiting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    if frame_queue:
+        frame_queue.put(None)
+    if image_queue:
+        image_queue.put(None)
     if global_cap:
         global_cap.release()
     if video:
         video.release()
     time.sleep(1)
-    print("exiting sucessfully")
+    print("exiting sucessfully x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x00x0x0x00x0xx0")
 
 signal.signal(signal.SIGINT, handler)
 
