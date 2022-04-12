@@ -197,7 +197,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
 
         remain_detection = []
         cur_dims = dims
-        if prev_frame:
+        if prev_frame is not None:
             remain_detection, cur_dims = run_compare_thread(dims, prev_frame, frame, prev_detection)
 
         print(len(cur_dims), "after threading")
