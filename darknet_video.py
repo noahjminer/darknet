@@ -126,7 +126,7 @@ def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result, thread
     start_thread = time.time()
     x1, x2, y1, y2 = dim
     count = 0
-    compress_level = 5 # distance between checking pixels
+    compress_level = 8 # distance between checking pixels
     print (x1, x2, y1, y2)
     for x in range(x1, x2, compress_level):
         for y in range(y1, y2, compress_level):
@@ -138,7 +138,7 @@ def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result, thread
                                     (int(b1) - int(b2))**2 )
             
             if color_diff > 5: # change this to a RBG compare function
-                count += compress_level
+                count += compress_level**2
                 # if pixels are different, assuming that whole section is different
 
     end_thread = time.time()
