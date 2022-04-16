@@ -8,6 +8,8 @@ import argparse
 from threading import Thread, enumerate
 from darknet_images import depth_detection_on_frame
 from queue import Queue
+import tensorflow as tf
+from tensorflow.python.saved_model import tag_constants
 import signal
 import math
 
@@ -184,7 +186,7 @@ def run_compare_thread(dims, prev_frame, frame, prev_detection):
     return remain_detection, new_dims
 
 
-def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
+def inference(image_queue, detections_queue, fps_queue, dims, infer, class_names, class_colors, detection_thresh):
     global prev_frame, prev_detection, global_cap
 
     while global_cap.isOpened():
@@ -208,7 +210,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
         if len(dims):
           slice_side_length = dims[0][1] - dims[0][0]
 
-        detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length, detection_thresh)
+        detections = depth_detection_on_frame(frame, cur_dims, infer, class_names, class_colors, slice_side_length, detection_thresh)
         for detection in remain_detection:
             detections.append(detection)
        
@@ -262,6 +264,7 @@ prev_frame = None
 frame_queue = None
 image_queue = None
 
+
 def detect_video(args, video_path, dims, detection_thresh, output_filename='result.avi'):
     global global_cap, darknet_width, darknet_height, frame_queue, image_queue
 
@@ -270,12 +273,21 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     detections_queue = Queue(maxsize=1)
     fps_queue = Queue(maxsize=1)
 
-    network, class_names, class_colors = darknet.load_network(
-        args.config_file,
-        args.data_file,
-        args.weights,
-        batch_size=len(dims)
-    )
+    # network, class_names, class_colors = darknet.load_network(
+    #     args.config_file,
+    #     args.data_file,
+    #     args.weights,
+    #     batch_size=len(dims)
+    # )
+
+    saved_model_loaded = tf.saved_model.load(args.weights, tags=[tag_constants.SERVING])
+    infer = saved_model_loaded.signatures['serving_default']
+    # batch_data = tf.constant(images_data)
+    # pred_bbox = infer(batch_data)
+    # for key, value in pred_bbox.items():
+    #     boxes = value[:, :, 0:4]
+    #     pred_conf = value[:, :, 4:]
+
     darknet_width = darknet.network_width(network)
     darknet_height = darknet.network_height(network)
 
@@ -286,7 +298,7 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     video_height = int(global_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     capture_thread = Thread(target=video_capture, args=(frame_queue, image_queue))
     inference_thread = Thread(target=inference, args=(
-    image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
+    image_queue, detections_queue, fps_queue, dims, infer, class_names, class_colors, detection_thresh))
     drawing_thread = Thread(target=drawing, args=(
     frame_queue, detections_queue, fps_queue, video_width, video_height, class_colors, output_filename))
 

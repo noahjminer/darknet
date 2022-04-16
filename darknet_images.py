@@ -5,10 +5,11 @@ import random
 import time
 import cv2
 import numpy as np
+import tensorflow as tf
 import darknet
 import math
 
-from depth_map_scripts import create_depth_map_with_avg, create_depth_map_with_threshold
+from depth_map_scripts import create_depth_map_with_threshold, create_baseline_grid
 
 
 def parser():
@@ -118,31 +119,18 @@ def image_detection(image_path, network, class_names, class_colors, thresh):
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), detections
 
 
-# CHANGES BEGIN HERE ------------------------------------------------------
-
-# Slices images to desired size in np.array dim (y, x, 3).
-# This is the format that darknet accepts
-# known problems:
-#   If image size is just over slice width or height,
-#   it cuts off images.
-dimension = [[0, 500, 0, 500], [500, 1500, 0, 1000], [0, 4096, 0, 2786]]
-
-
-def sliceImagecv2(dimension, image):
-    slices = []
-    for dim in dimension:
-        newSlice = image[dim[2]:dim[3], dim[0]:dim[1]]
-        slices.append(newSlice)
-
-    return slices
+# ------------------------------------
+#
+#
+#   Changes begin here
+#
+#
+# ------------------------------------
 
 
 def image_detection_list(image_path, network, class_names, class_colors, thresh):
-    # Darknet doesn't accept numpy images.
-    # Create one with image we reuse for each detect
+    dimension = create_baseline_grid(image_path)
 
-    # width = slice_width
-    # height = slice_height
     width = []
     height = []
     for dim in dimension:
@@ -150,28 +138,20 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
         height.append(dim[3] - dim[2])
 
     orig_img = cv2.imread(image_path)
-    shape = orig_img.shape
-    orig_img_width = shape[1]
-    orig_img_height = shape[0]
     orig_img_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     bboxes = []
-    images = sliceImagecv2(dimension, orig_img)
-    # orig_img_resized = cv2.resize(orig_img_rgb, (width, height), interpolation=cv2.INTER_LINEAR)
+    images = []
+    for dim in dimension:
+        new_slice = orig_img_rgb[dim[2]:dim[3], dim[0]:dim[1]]
+        images.append(new_slice)
 
     for i, img in enumerate(images):
         darknet_image = darknet.make_image(width[i], height[i], 3)
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        # image_resized = cv2.resize(image_rgb, (width[i], height[i]), interpolation=cv2.INTER_LINEAR)
-
         darknet.copy_image_from_bytes(darknet_image, image_rgb.tobytes())
         detections = darknet.detect_image(network, class_names, darknet_image, thresh=thresh)
         bboxes.append(detections)
         darknet.free_image(darknet_image)
-
-    # CORRECT BOUNDING BOX COORDINATES
-    # TODO: BOUNDING BOX COMBINATIONS
-    # can edit once sizes are uniform, or collect array of sizes.
 
     for i, img_boxes in enumerate(bboxes):
         for j, box in enumerate(img_boxes):
@@ -194,10 +174,12 @@ def image_detection_list(image_path, network, class_names, class_colors, thresh)
     return darknet.draw_boxes(final_detections, orig_img, class_colors), final_detections
 
 
-def depth_detection_on_frame(frame, dims, network, class_names, class_colors, slice_side_length, detection_thresh):
+def depth_detection_on_frame(frame, dims, infer, class_names, class_colors, slice_side_length, detection_thresh):
+    """Doing depth detection on an inputted frame and the frame's slices"""
+
     shape = frame.shape
-    width = darknet.network_width(network)
-    height = darknet.network_height(network)
+    width = darknet.network_width(608)
+    height = darknet.network_height(608)
 
     images = []
     for dim in dims:
@@ -205,14 +187,25 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
         if slice_side_length != 608:
             new_slice = cv2.resize(new_slice, (width, height),
                                    interpolation=cv2.INTER_LINEAR)
+            new_slice = new_slice / 255.
         images.append(new_slice)
 
-    # batch_time = time.time()
-    bboxes = []
-    if len(dims) > 0:
-      bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+    images = np.asarray(images).astype(np.float32)
 
-    # can edit once sizes are uniform, or collect array of sizes.
+
+    bboxes = []
+    for i in images:
+        batch_data = tf.constant(i)
+        pred_bboxes = infer(batch_data)
+        for key, value in pred_bboxes.items():
+            boxes = value[:, :, 0:4]
+            pred_conf = value[:, :, 4:]
+        bboxes.append(boxes)
+
+    # bboxes = []
+    # if len(dims) > 0:
+    #   bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+
     for i, img_boxes in enumerate(bboxes):
         for j, box in enumerate(img_boxes):
             bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
@@ -221,29 +214,29 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
             y = dims[i][2] + y
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
-    # print('slices done in ', time.time() - batch_time)
-
-    # do whole image
-    # whole_time = time.time()
+    # do whole image ---------------
     decompress_rate_x = shape[1] / width
     decompress_rate_y = shape[0] / height
-    darknet_image = darknet.make_image(width, height, 3)
+    # darknet_image = darknet.make_image(width, height, 3)
     image_resized = cv2.resize(frame, (width, height),
                                interpolation=cv2.INTER_LINEAR)
-    darknet.copy_image_from_bytes(darknet_image, image_resized.tobytes())
-    detections = darknet.detect_image(network, class_names, darknet_image, thresh=detection_thresh)
-    for index, detection in enumerate(detections):
+    image_resized = np.asarray([image_resized]).astype(np.float32)
+    pred_bboxes_whole = infer(tf.constant(image_resized))
+    print(pred_bboxes_whole)
+    for value, key in pred_bboxes_whole:
+        boxes = value[:, :, 0:4]
+    print(boxes)
+    for index, detection in enumerate(boxes):
         x, y, w, h = detection[2]
-        x = x  * decompress_rate_x
-        y = y  * decompress_rate_y
+        x = x * decompress_rate_x
+        y = y * decompress_rate_y
         w = w * decompress_rate_x
         h = h * decompress_rate_y
-        detections[index] = (detection[0], detection[1], (x, y, w, h))
+        boxes[index] = (detection[0], detection[1], (x, y, w, h))
 
-    bboxes.append(detections)
-    darknet.free_image(darknet_image)
-    # print(time.time() - whole_time, ' seconds for whole image')
+    bboxes.append(boxes)
 
+    # clean detections --------------
     flat_detections = [item for sub_list in bboxes for item in sub_list]
 
     final_detections = []
@@ -252,20 +245,14 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
             continue
         final_detections.append(item)
 
-    # for outputting depth map variables
-    # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
-
     final_detections = darknet.non_max_suppression_fast(final_detections, 0.7)
-    # print('---------------')
-    # # elapsed_time = time.time() - prev_time
-    # print('Detection took ', elapsed_time)
-    # print('---------------')
-    # image = darknet.draw_slices(dims, orig_img, class_colors)
     return final_detections
 
 
-def depth_detection_list(image_path, args, class_names, class_colors, depth_path, depth_thresh, img_thresh,
+def depth_detection_list(image_path, args, depth_path, depth_thresh, img_thresh,
                          proportion_thresh, slice_side_length):
+    """Depth detection on a single image given by a path."""
+    # load dims if they exist
     dims = []
     if os.path.exists(image_path.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
         with open(image_path.split('.', 1)[0] + '_dims.txt', 'r') as infile:
@@ -277,7 +264,8 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
     else:
         dims = create_depth_map_with_threshold(depth_path, depth_thresh, proportion_thresh, slice_side_length)
 
-    random.seed(3)  # deterministic bbox colors
+    # create network ---------------
+    random.seed(3)
     network, class_names, class_colors = darknet.load_network(
         args.config_file,
         args.data_file,
@@ -290,10 +278,9 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
     image_rgb = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
     width = darknet.network_width(network)
     height = darknet.network_height(network)
-
     shape = orig_img.shape
-    print('read time took ', time.time() - prev_time)
 
+    # create slices, compress to 608 if needed
     batch_time = time.time()
     images = []
     for dim in dims:
@@ -301,17 +288,15 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
         slice_shape = new_slice.shape
 
         if slice_side_length != 608:
-            new_slice = cv2.resize(new_slice, (width, height),
-                               interpolation=cv2.INTER_LINEAR)
+            new_slice = cv2.resize(new_slice, (width, height), interpolation=cv2.INTER_LINEAR)
         images.append(new_slice)
 
+    # correcting slice's bbox coords
     bboxes = []
     if len(dims):
         decompress_slice_x = slice_shape[1] / 608
         decompress_slice_y = slice_shape[0] / 608
         bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
-
-        # can edit once sizes are uniform, or collect array of sizes.
         for i, img_boxes in enumerate(bboxes):
             for j, box in enumerate(img_boxes):
                 bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
@@ -324,9 +309,11 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
                 h = h * decompress_slice_y
                 bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
-    print('slices done in ', time.time() - batch_time)
+    print('---------------')
+    print('Detection on whole compressed image took ', time.time() - batch_time)
+    print('---------------')
 
-    # do whole image
+    # Object detection on entire (compressed) image ---------------
     whole_time = time.time()
     decompress_rate_x = shape[1] / width
     decompress_rate_y = shape[0] / height
@@ -344,8 +331,12 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
         detections[index] = (detection[0], detection[1], (x, y, w, h))
     bboxes.append(detections)
     darknet.free_image(darknet_image)
-    print(time.time() - whole_time, ' seconds for whole image')
 
+    print('---------------')
+    print('Detection on whole compressed image took ', time.time() - whole_time)
+    print('---------------')
+
+    # Cleaning detections -------------------------
     flat_detections = [item for sub_list in bboxes for item in sub_list]
 
     final_detections = []
@@ -353,14 +344,11 @@ def depth_detection_list(image_path, args, class_names, class_colors, depth_path
         if item[0] != 'person':
             continue
         final_detections.append(item)
-
-    # for outputting depth map variables
-    # final_detections.append((thresh, compress_rate, (10, 10, 100, 10)))
-
     final_detections = darknet.non_max_suppression_fast(final_detections, 0.7)
-    print('---------------')
+
     elapsed_time = time.time() - prev_time
-    print('Detection took ', elapsed_time)
+    print('---------------')
+    print('Overall detection took ', elapsed_time)
     print('---------------')
     image = darknet.draw_slices(dims, orig_img, class_colors)
     return darknet.draw_boxes(final_detections, image, class_colors), final_detections, dims
@@ -379,7 +367,7 @@ def batch_detection(network, images, class_names, class_colors,
         if nms:
             darknet.do_nms_obj(detections, num, len(class_names), nms)
         predictions = darknet.remove_negatives(detections, class_names, num)
-        images[idx] = darknet.draw_boxes(predictions, images[idx], class_colors)
+        # images[idx] = darknet.draw_boxes(predictions, images[idx], class_colors)
         batch_predictions.append(predictions)
     darknet.free_batch_detections(batch_detections, batch_size)
     return batch_predictions

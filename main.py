@@ -95,30 +95,15 @@ def generate_depth_image_from_frame(args, f):
     return output
 
 
-def depth_mask(args):
-    assert args.image_path is not None
-
-    random.seed(3)
-    network, class_names, class_colors = darknet.load_network(
-        args.config_file,
-        args.data_file,
-        args.weights,
-        batch_size=args.batch_size
-    )
-
-
 # Lower calibration time - do it in seperate process
 def depth_slice(args):
     files = []
-
     assert args.image_path is not None
+
     if args.batch:
         files = get_path_list_from_dir(args.image_path)
     else:
         files.append(args.image_path)
-
-    # create darknet things
-    random.seed(3)  # deterministic bbox colors
 
     depth_thresh = args.depth_threshold
     detection_thresh = args.detection_thresh
@@ -154,7 +139,7 @@ def depth_slice(args):
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')
-            image, detections, depth_dims = depth_detection_list(f, args, None, None, depth_root_path, depth_thresh,
+            image, detections, depth_dims = depth_detection_list(f, args, depth_root_path, depth_thresh,
                                                                  detection_thresh, args.proportion_thresh, args.slice_side_length)
             new_path = args.image_path.rsplit('.', 1)[0] + "_result." + args.image_path.rsplit('.', 1)[1]
             dims_path = args.image_path.rsplit('.', 1)[0] + "_dims.txt"
@@ -201,8 +186,5 @@ if __name__ == '__main__':
         baseline(args)
     elif args.method == 'depth':
         depth_slice(args)
-    elif args.method == 'depth_mask':
-        depth_mask(args)
-
 
 
