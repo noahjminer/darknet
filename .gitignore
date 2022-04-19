@@ -1,3 +1,7 @@
+*.jpeg
+*.npy
+*.txt
+*.jpg
 *.o
 *.a
 *.dSYM
