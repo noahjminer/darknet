@@ -217,8 +217,8 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
         for j, box in enumerate(img_boxes):
             bbox = box[2]  # detections are a tuple of (label, confidence, bbox)
             x, y, w, h = bbox
-            x = dims[i][0] + x
-            y = dims[i][2] + y
+            x = dims[i][0] + (x / 608 * (dims[i][1]-dims[i][0]))
+            y = dims[i][2] + (y / 608 * (dims[i][3]-dims[i][2]))
             bboxes[i][j] = (box[0], box[1], (x, y, w, h))
 
     # print('slices done in ', time.time() - batch_time)
