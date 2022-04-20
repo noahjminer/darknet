@@ -60,9 +60,9 @@ def parse_args():
                         help="number of images to be processed at the same time")
     parser.add_argument("--slice_side_length", default=608, type=int,
                         help="length of slice side in depth map")
-    parser.add_argument("--refresh_dims", default=True, type=bool
+    parser.add_argument("--no_refresh_dims", action='store_true'
                         )
-    parser.add_argument("--refresh_depth", default=True, type=bool
+    parser.add_argument("--no_refresh_depth", action='store_true'
                         )
     parser.add_argument("--proportion_thresh", type=float, default=.3,
                         help="the proportion of a slice that further than the depth_threshold, value from 0.0 to 1.0, with 0.0 is No area in the slice is further than threshold")
@@ -125,16 +125,16 @@ def depth_slice(args):
     proportion_thresh = args.proportion_thresh
 
     depth_root_path = args.image_path.rsplit('.', 1)[0] + "_disp.jpeg"
-
+    print(args)
     if args.video:
         for f in files:
-            if not os.path.exists(depth_root_path) or args.refresh_depth:
+            if not os.path.exists(depth_root_path) or not args.no_refresh_depth:
                 depth_root_path = generate_depth_image_from_frame(args, f)
             else:
                 print_update('depth image already generated, moving on...')
             # generate dims
             dims = []
-            if os.path.exists(f.split('.', 1)[0] + '_dims.txt') and not args.refresh_depth:
+            if os.path.exists(f.split('.', 1)[0] + '_dims.txt') and args.no_refresh_dims:
                 with open(f.split('.', 1)[0] + '_dims.txt', 'r') as infile:
                     content = infile.readlines()
                     for line in content:
@@ -150,7 +150,7 @@ def depth_slice(args):
             detect_video(args, f, dims, detection_thresh)
     else:
         for index, f in enumerate(files):
-            if not os.path.exists(depth_root_path) or args.refresh_depth:
+            if not os.path.exists(depth_root_path) or not args.no_refresh_depth:
                 depth_root_path = generate_depth_image_from_file(args, f)
             else:
                 print_update('depth image already generated, moving on...')

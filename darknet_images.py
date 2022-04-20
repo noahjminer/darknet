@@ -208,9 +208,15 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
         images.append(new_slice)
 
     # batch_time = time.time()
-    bboxes = []
     if len(dims) > 0:
       bboxes = batch_detection(network, images, class_names, class_colors, batch_size=len(dims))
+    bboxes = []
+    darknet_image = darknet.make_image(width, height, 3)
+    for image in images:
+      darknet.copy_image_from_bytes(darknet_image, image.tobytes())
+      detections = darknet.detect_image(network, class_names, darknet_image, thresh=detection_thresh)
+      bboxes.append(detections)
+    darknet.free_image(darknet_image)
 
     # can edit once sizes are uniform, or collect array of sizes.
     for i, img_boxes in enumerate(bboxes):
@@ -267,7 +273,7 @@ def depth_detection_on_frame(frame, dims, network, class_names, class_colors, sl
 def depth_detection_list(image_path, args, class_names, class_colors, depth_path, depth_thresh, img_thresh,
                          proportion_thresh, slice_side_length):
     dims = []
-    if os.path.exists(image_path.split('.', 1)[0] + '_dims.txt') and not args.refresh_dims:
+    if os.path.exists(image_path.split('.', 1)[0] + '_dims.txt') and args.no_refresh_dims:
         with open(image_path.split('.', 1)[0] + '_dims.txt', 'r') as infile:
             content = infile.readlines()
             for line in content:
@@ -376,11 +382,14 @@ def batch_detection(network, images, class_names, class_colors,
     for idx in range(batch_size):
         num = batch_detections[idx].num
         detections = batch_detections[idx].dets
+        print(detections)
         if nms:
             darknet.do_nms_obj(detections, num, len(class_names), nms)
         predictions = darknet.remove_negatives(detections, class_names, num)
-        images[idx] = darknet.draw_boxes(predictions, images[idx], class_colors)
+        predictions = darknet.decode_detection(predictions)
+        # images[idx] = darknet.draw_boxes(predictions, images[idx], class_colors)
         batch_predictions.append(predictions)
+    print(batch_predictions)
     darknet.free_batch_detections(batch_detections, batch_size)
     return batch_predictions
 

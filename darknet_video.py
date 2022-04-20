@@ -121,30 +121,31 @@ def video_capture(frame_queue, image_queue):
     # cap.release()
 
 
-def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result, thread_id):  #diff_thresh is the different threshhold, value from 0 to 1, 0 is no change
-    #function return true if the proportion of changes in slice is greater than diff_thresh 
+def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result,
+                   thread_id):  # diff_thresh is the different threshhold, value from 0 to 1, 0 is no change
+    # function return true if the proportion of changes in slice is greater than diff_thresh
     start_thread = time.time()
     x1, x2, y1, y2 = dim
     count = 0
-    compress_level = 8 # distance between checking pixels
-    print (x1, x2, y1, y2)
+    compress_level = 8  # distance between checking pixels
+    print(x1, x2, y1, y2)
     for x in range(x1, x2, compress_level):
         for y in range(y1, y2, compress_level):
-            r1, g1, b1 = pre_frame[y,x]
-            r2, g2, b2 = cur_frame[y,x]
+            r1, g1, b1 = pre_frame[y, x]
+            r2, g2, b2 = cur_frame[y, x]
 
-            color_diff = math.sqrt ((int(r1) - int(r2))**2 +
-                                    (int(g1) - int(g2))**2 +
-                                    (int(b1) - int(b2))**2 )
-            
-            if color_diff > 5: # change this to a RBG compare function
-                count += compress_level**2
+            color_diff = math.sqrt((int(r1) - int(r2)) ** 2 +
+                                   (int(g1) - int(g2)) ** 2 +
+                                   (int(b1) - int(b2)) ** 2)
+
+            if color_diff > 5:  # change this to a RBG compare function
+                count += compress_level ** 2
                 # if pixels are different, assuming that whole section is different
 
     end_thread = time.time()
-    print(count/((x2-x1)*(y2-y1)), '----------' , diff_thresh, " in time ", end_thread-start_thread)
-    
-    if count/((x2-x1)*(y2-y1)) > diff_thresh:
+    print(count / ((x2 - x1) * (y2 - y1)), '----------', diff_thresh, " in time ", end_thread - start_thread)
+
+    if count / ((x2 - x1) * (y2 - y1)) > diff_thresh:
         thread_result[thread_id] = True
     else:
         thread_result[thread_id] = False
@@ -178,7 +179,7 @@ def run_compare_thread(dims, prev_frame, frame, prev_detection):
                 # detection is label, confidence, bbox
                 # x, y, w, h = bbox
                 if check_object_in_prev_slice(detection[2], dim):
-                   remain_detection.append(detection)
+                    remain_detection.append(detection)
         else:
             new_dims.append(dims[i])
     return remain_detection, new_dims
@@ -192,28 +193,29 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
         if frame is None:
             break
         prev_time = time.time()
-        
+
         print(len(dims), "before threading")
 
         remain_detection = []
         cur_dims = dims
-        if prev_frame is not None:
-            remain_detection, cur_dims = run_compare_thread(dims, prev_frame, frame, prev_detection)
+        # if prev_frame is not None:
+        # remain_detection, cur_dims = run_compare_thread(dims, prev_frame, frame, prev_detection)
 
         print(len(cur_dims), "after threading")
-        
+
         prev_frame = frame
 
         slice_side_length = 0
         if len(dims):
-          slice_side_length = dims[0][1] - dims[0][0]
+            slice_side_length = dims[0][1] - dims[0][0]
 
-        detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length, detection_thresh)
+        detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length,
+                                              detection_thresh)
         for detection in remain_detection:
             detections.append(detection)
-       
+
         detections_queue.put(detections)
-        
+
         prev_detection = detections
 
         fps = float(1 / (time.time() - prev_time))
@@ -223,7 +225,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
     # cap.release()
 
 
-def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height, class_colors,
+def drawing(frame_queue, detections_queue, dims, fps_queue, video_width, video_height, class_colors,
             output_filename='result.avi'):
     random.seed(3)  # deterministic bbox colors
     global video
@@ -240,6 +242,7 @@ def drawing(frame_queue, detections_queue, fps_queue, video_width, video_height,
             #    bbox_adjusted = convert2original(frame, bbox)
             #    detections_adjusted.append((str(label), confidence, bbox_adjusted))
             image = darknet.draw_boxes(detections, frame, class_colors)
+            image = darknet.draw_slices(dims, image, class_colors)
             # if not args.dont_show:
             #     cv2.imshow('Inference', image)
             if output_filename is not None:
@@ -261,6 +264,7 @@ prev_frame = None
 
 frame_queue = None
 image_queue = None
+
 
 def detect_video(args, video_path, dims, detection_thresh, output_filename='result.avi'):
     global global_cap, darknet_width, darknet_height, frame_queue, image_queue
@@ -286,9 +290,9 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     video_height = int(global_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     capture_thread = Thread(target=video_capture, args=(frame_queue, image_queue))
     inference_thread = Thread(target=inference, args=(
-    image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
+        image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
     drawing_thread = Thread(target=drawing, args=(
-    frame_queue, detections_queue, fps_queue, video_width, video_height, class_colors, output_filename))
+        frame_queue, detections_queue, dims, fps_queue, video_width, video_height, class_colors, output_filename))
 
     capture_thread.start()
     inference_thread.start()
@@ -298,6 +302,7 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     inference_thread.join()
     drawing_thread.join()
     print("Done with video")
+
 
 def handler(signum, frame):
     global global_cap, video, frame_queue, image_queue
@@ -312,6 +317,7 @@ def handler(signum, frame):
         video.release()
     time.sleep(1)
     print("exiting sucessfully x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x0x00x0x0x00x0xx0")
+
 
 signal.signal(signal.SIGINT, handler)
 
