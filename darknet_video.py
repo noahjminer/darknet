@@ -249,12 +249,12 @@ def drawing(frame_queue, detections_queue, dims, fps_queue, video_width, video_h
             #     cv2.imshow('Inference', image)
             if output_filename is not None:
                 video.write(image)
-                txt_output.write(frame_count)
-                txt_output.write(detections)
+                txt_output.write(str(frame_count) + '\n')
                 for label, confidence, bbox in detections:
                     x, y, w, h = bbox
-                    txt_output.write("{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})".format(
+                    txt_output.write("{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})\n".format(
                         label, confidence, x, y, w, h))
+                frame_count += 1
             if cv2.waitKey(int(fps)) == 27:
                 break
     global_cap.release()
