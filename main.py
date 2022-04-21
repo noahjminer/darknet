@@ -9,6 +9,7 @@ import random
 import os
 import cv2
 import time
+import math
 
 
 def parse_args():
@@ -70,7 +71,19 @@ def parse_args():
 
 
 def baseline(args):
-    print('Baseline')
+    if args.video:
+        dims = generate_baseline_dims_from_frame(args, args.image_path, args.slice_side_length)
+        detect_video(args,args.image_path,dims,args.detection_thresh,output_filename='baseline.avi')
+    else:
+        random.seed(3)
+        network, class_names, class_colors = darknet.load_network(
+            args.config_file,
+            args.data_file,
+            args.weights,
+            batch_size=1
+        )
+        dims = generate_baseline_dims_from_file(args, args.image_path, args.slice_side_length)
+        image_detection_list(args.image_path, dims, network, class_names, class_colors, args.dimension_thresh)
 
 
 def generate_depth_image_from_file(args, f):
@@ -94,6 +107,89 @@ def generate_depth_image_from_frame(args, f):
     print_update(f'Generation complete in {diff}, output at {output}')
     return output
 
+
+def generate_baseline_dims_from_file(args, f, slice_side_length, expand_ratio=.2):
+    image = cv2.imread(f)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    shape = image.shape
+    height = int(shape[0])
+    width = int(shape[1])
+
+    # 608 is what darknet compresses images to
+    num_slice_x = math.floor(width / slice_side_length)
+    num_slice_y = math.floor(height / slice_side_length)
+
+    slice_dim_x = math.ceil(width / num_slice_x)
+    slice_dim_y = math.ceil(height / num_slice_y)
+
+    avgs = []
+    no_comp_dims = []
+    expand_amount = expand_ratio * slice_side_length
+    half_expand_amount = math.floor(expand_amount * .5)
+    for x in range(1, num_slice_x + 1):
+        col_avg = []
+        for y in range(1, num_slice_y + 1):
+            left = (x - 1) * slice_dim_x
+            right = x * slice_dim_x
+            top = (y - 1) * slice_dim_y
+            bottom = y * slice_dim_y
+            if bottom >= height:
+                bottom = height - 1
+                top = bottom - slice_dim_y
+            if right >= width:
+                right = width - 1
+                left = right - slice_dim_x
+            if top < 0:
+                top = 0
+            if left < 0:
+                left = 0
+            dim = [left, right, top, bottom]
+            no_comp_dims.append(dim)
+    return no_comp_dims
+
+
+def generate_baseline_dims_from_frame(args, f, slice_side_length, expand_ratio=.2):
+    cap = cv2.VideoCapture(f)
+    ret, frame = cap.read()
+    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    cap.release()
+
+    shape = image.shape
+    height = int(shape[0])
+    width = int(shape[1])
+
+    # 608 is what darknet compresses images to
+    num_slice_x = math.floor(width / slice_side_length)
+    num_slice_y = math.floor(height / slice_side_length)
+
+    slice_dim_x = math.ceil(width / num_slice_x)
+    slice_dim_y = math.ceil(height / num_slice_y)
+
+    avgs = []
+    no_comp_dims = []
+    expand_amount = expand_ratio * slice_side_length
+    half_expand_amount = math.floor(expand_amount * .5)
+    for x in range(1, num_slice_x + 1):
+        col_avg = []
+        for y in range(1, num_slice_y + 1):
+            left = (x - 1) * slice_dim_x
+            right = x * slice_dim_x
+            top = (y - 1) * slice_dim_y
+            bottom = y * slice_dim_y
+            if bottom >= height:
+                bottom = height - 1
+                top = bottom - slice_dim_y
+            if right >= width:
+                right = width - 1
+                left = right - slice_dim_x
+            if top < 0:
+                top = 0
+            if left < 0:
+                left = 0
+            dim = [left, right, top, bottom]
+            no_comp_dims.append(dim)
+    return no_comp_dims
 
 def depth_mask(args):
     assert args.image_path is not None

@@ -6,7 +6,7 @@ import time
 import darknet
 import argparse
 from threading import Thread, enumerate
-from darknet_images import depth_detection_on_frame
+from darknet_images import depth_detection_on_frame, image_detection_list_on_frame
 from queue import Queue
 import signal
 import math
@@ -185,7 +185,7 @@ def run_compare_thread(dims, prev_frame, frame, prev_detection):
     return remain_detection, new_dims
 
 
-def inference(image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
+def inference(method, image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh):
     global prev_frame, prev_detection, global_cap
 
     while global_cap.isOpened():
@@ -208,9 +208,11 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
         slice_side_length = 0
         if len(dims):
             slice_side_length = dims[0][1] - dims[0][0]
-
-        detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length,
+        if method == 'depth':
+            detections = depth_detection_on_frame(frame, cur_dims, network, class_names, class_colors, slice_side_length,
                                               detection_thresh)
+        else:
+            detections = image_detection_list_on_frame(frame, dims, network, class_names, class_colors, detection_thresh)
         for detection in remain_detection:
             detections.append(detection)
 
@@ -228,7 +230,7 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
 def drawing(frame_queue, detections_queue, dims, fps_queue, video_width, video_height, class_colors,
             output_filename='result.avi'):
     random.seed(3)  # deterministic bbox colors
-    global video
+    global video, txt_output, frame_count
     video = set_saved_video(global_cap, output_filename, (video_width, video_height))
     while global_cap.isOpened():
         frame = frame_queue.get()
@@ -247,6 +249,12 @@ def drawing(frame_queue, detections_queue, dims, fps_queue, video_width, video_h
             #     cv2.imshow('Inference', image)
             if output_filename is not None:
                 video.write(image)
+                txt_output.write(frame_count)
+                txt_output.write(detections)
+                for label, confidence, bbox in detections:
+                    x, y, w, h = bbox
+                    txt_output.write("{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})".format(
+                        label, confidence, x, y, w, h))
             if cv2.waitKey(int(fps)) == 27:
                 break
     global_cap.release()
@@ -264,22 +272,35 @@ prev_frame = None
 
 frame_queue = None
 image_queue = None
+frame_count = 1
+
+txt_output = None
 
 
 def detect_video(args, video_path, dims, detection_thresh, output_filename='result.avi'):
-    global global_cap, darknet_width, darknet_height, frame_queue, image_queue
+    global global_cap, darknet_width, darknet_height, frame_queue, image_queue, txt_output
+
+    txt_output = open(args.image_path.split('.', 1)[0] + '_detections.txt', 'w')
 
     frame_queue = Queue()
     image_queue = Queue(maxsize=1)
     detections_queue = Queue(maxsize=1)
     fps_queue = Queue(maxsize=1)
 
-    network, class_names, class_colors = darknet.load_network(
-        args.config_file,
-        args.data_file,
-        args.weights,
-        batch_size=len(dims)
-    )
+    if args.method == 'baseline':
+        network, class_names, class_colors = darknet.load_network(
+            args.config_file,
+            args.data_file,
+            args.weights,
+            batch_size=1
+        )
+    else:
+        network, class_names, class_colors = darknet.load_network(
+            args.config_file,
+            args.data_file,
+            args.weights,
+            batch_size=len(dims)
+        )
     darknet_width = darknet.network_width(network)
     darknet_height = darknet.network_height(network)
 
@@ -289,7 +310,7 @@ def detect_video(args, video_path, dims, detection_thresh, output_filename='resu
     video_width = int(global_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     video_height = int(global_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     capture_thread = Thread(target=video_capture, args=(frame_queue, image_queue))
-    inference_thread = Thread(target=inference, args=(
+    inference_thread = Thread(target=inference, args=(args.method,
         image_queue, detections_queue, fps_queue, dims, network, class_names, class_colors, detection_thresh))
     drawing_thread = Thread(target=drawing, args=(
         frame_queue, detections_queue, dims, fps_queue, video_width, video_height, class_colors, output_filename))
