@@ -10,7 +10,8 @@ from darknet_images import depth_detection_on_frame
 from queue import Queue
 import signal
 import math
-
+from google.colab.patches import cv2_imshow
+from IPython.display import clear_output
 
 def parser():
     parser = argparse.ArgumentParser(description="YOLO Object Detection")
@@ -128,7 +129,7 @@ def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result,
     x1, x2, y1, y2 = dim
     count = 0
     compress_level = 8  # distance between checking pixels
-    print(x1, x2, y1, y2)
+    # print(x1, x2, y1, y2)
     for x in range(x1, x2, compress_level):
         for y in range(y1, y2, compress_level):
             r1, g1, b1 = pre_frame[y, x]
@@ -143,7 +144,7 @@ def compare_slices(pre_frame, cur_frame, dim, diff_thresh, thread_result,
                 # if pixels are different, assuming that whole section is different
 
     end_thread = time.time()
-    print(count / ((x2 - x1) * (y2 - y1)), '----------', diff_thresh, " in time ", end_thread - start_thread)
+    # print(count / ((x2 - x1) * (y2 - y1)), '----------', diff_thresh, " in time ", end_thread - start_thread)
 
     if count / ((x2 - x1) * (y2 - y1)) > diff_thresh:
         thread_result[thread_id] = True
@@ -169,7 +170,7 @@ def run_compare_thread(dims, prev_frame, frame, prev_detection):
         thread_tracker[i].start()
     for i in range(len(dims)):
         thread_tracker[i].join()
-    print("end in -----------------", time.time() - start_time)
+    # print("end in -----------------", time.time() - start_time)
     remain_detection = []
     new_dims = []
     for i in range(len(dims)):
@@ -194,14 +195,14 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
             break
         prev_time = time.time()
 
-        print(len(dims), "before threading")
+        # print(len(dims), "before threading")
 
         remain_detection = []
         cur_dims = dims
         # if prev_frame is not None:
         # remain_detection, cur_dims = run_compare_thread(dims, prev_frame, frame, prev_detection)
 
-        print(len(cur_dims), "after threading")
+        # print(len(cur_dims), "after threading")
 
         prev_frame = frame
 
@@ -220,8 +221,8 @@ def inference(image_queue, detections_queue, fps_queue, dims, network, class_nam
 
         fps = float(1 / (time.time() - prev_time))
         fps_queue.put(fps)
-        print("FPS: {}".format(fps))
-        darknet.print_detections(detections, True)
+        # print("FPS: {}".format(fps))
+        # darknet.print_detections(detections, True)
     # cap.release()
 
 
@@ -244,14 +245,15 @@ def drawing(frame_queue, detections_queue, dims, fps_queue, video_width, video_h
             image = darknet.draw_boxes(detections, frame, class_colors)
             image = darknet.draw_slices(dims, image, class_colors)
             # if not args.dont_show:
-            #     cv2.imshow('Inference', image)
+            clear_output()
+            cv2_imshow(image)
             if output_filename is not None:
                 video.write(image)
             if cv2.waitKey(int(fps)) == 27:
                 break
     global_cap.release()
     video.release()
-    # cv2.destroyAllWindows()
+    cv2.destroyAllWindows()
 
 
 global_cap = None
