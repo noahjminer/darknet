@@ -70,6 +70,7 @@ def parse_args():
     return parser.parse_args()
 
 
+# Runs baseline video or frame. Takes input args for program.
 def baseline(args):
     if args.video:
         dims = generate_baseline_dims_from_frame(args, args.image_path, args.slice_side_length)
@@ -86,6 +87,7 @@ def baseline(args):
         image_detection_list(args.image_path, dims, network, class_names, class_colors, args.dimension_thresh)
 
 
+# runs monodepth2 function for generating depth prediction from file. Takes args and filename
 def generate_depth_image_from_file(args, f):
     prev = time.time()
     print_update(f'Generating depth image for {f}')
@@ -95,6 +97,7 @@ def generate_depth_image_from_file(args, f):
     return output
 
 
+# generate depth prediction from frame
 def generate_depth_image_from_frame(args, f):
     prev = time.time()
     print_update(f'Generating depth image for {f}')
@@ -108,6 +111,7 @@ def generate_depth_image_from_frame(args, f):
     return output
 
 
+# generate s dimensions for slicing from opening a depth prediction image
 def generate_baseline_dims_from_file(args, f, slice_side_length, expand_ratio=.2):
     image = cv2.imread(f)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -149,6 +153,7 @@ def generate_baseline_dims_from_file(args, f, slice_side_length, expand_ratio=.2
     return no_comp_dims
 
 
+# generates dimensions to slice from a frame.
 def generate_baseline_dims_from_frame(args, f, slice_side_length, expand_ratio=.2):
     cap = cv2.VideoCapture(f)
     ret, frame = cap.read()
@@ -191,19 +196,8 @@ def generate_baseline_dims_from_frame(args, f, slice_side_length, expand_ratio=.
             no_comp_dims.append(dim)
     return no_comp_dims
 
-def depth_mask(args):
-    assert args.image_path is not None
 
-    random.seed(3)
-    network, class_names, class_colors = darknet.load_network(
-        args.config_file,
-        args.data_file,
-        args.weights,
-        batch_size=args.batch_size
-    )
-
-
-# Lower calibration time - do it in seperate process
+# runs depth based slicing algorithm on image or videos
 def depth_slice(args):
     files = []
 
@@ -271,7 +265,6 @@ def write_detections_to_file(detections, file_name):
     for detection in detections:
         _, _, bbox = detection
         output = output + f'{int(bbox[0])},{int(bbox[1])},{int(bbox[0]+bbox[2])},{int(bbox[1]+bbox[3])}\n'
-    filename = file_name.split('/')[-1]
     filename = file_name.split('.')[0]
     filename = filename + '.txt'
     with open(filename, 'w') as outfile:
@@ -297,8 +290,6 @@ if __name__ == '__main__':
         baseline(args)
     elif args.method == 'depth':
         depth_slice(args)
-    elif args.method == 'depth_mask':
-        depth_mask(args)
 
 
 
