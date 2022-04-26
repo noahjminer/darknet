@@ -1,3 +1,20 @@
+# Fast Detection in Big Images 
+
+## Texas A&M Capstone project 
+
+The code edited is in darknet_images.py darknet_videos.py, main.py, 
+and depth_map_scripts.py. To use it, follow this colab notebook. 
+
+https://colab.research.google.com/drive/1-WepxHEpvwcbjWDePOd2bwZfUGOqSo_r?usp=sharing
+
+Ensure you make your own copy. 
+
+We have custom weights or you can just get the coco dataset weights. 
+
+Check the args to change these parameters.
+
+The following read me will answer any questions you have about darknet and yolov4. 
+
 # Yolo v4, v3 and v2 for Windows and Linux
 
 ## (neural networks for object detection)
